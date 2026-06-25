@@ -1,4 +1,4 @@
-package com.barbercustomerapp
+package com.trimridebarber
 
 import android.app.Application
 import com.facebook.react.PackageList

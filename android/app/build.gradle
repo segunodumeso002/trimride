@@ -1,6 +1,7 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply plugin: "com.google.gms.google-services"
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -18,10 +19,9 @@ react {
     // cliFile = file("../../node_modules/react-native/cli.js")
 
     /* Variants */
-    //   The list of variants to that are debuggable. For those we're going to
-    //   skip the bundling of the JS bundle and the assets. By default is just 'debug'.
-    //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
-    // debuggableVariants = ["liteDebug", "prodDebug"]
+    // Bundle JS even for debug builds so emulator launch is not blocked by
+    // flaky Metro networking on 10.0.2.2. Metro can still run for logs/manual reloads.
+    debuggableVariants = []
 
     /* Bundling */
     //   A list containing the node command and its flags. Default is just 'node'.
@@ -73,17 +73,22 @@ def enableProguardInReleaseBuilds = false
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
-    ndkVersion rootProject.ext.ndkVersion
-    buildToolsVersion rootProject.ext.buildToolsVersion
+    ndkVersion rootProject.ext.ndkVersion    
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.barbercustomerapp"
+    namespace "com.trimridebarber"
     defaultConfig {
-        applicationId "com.barbercustomerapp"
+        applicationId "com.trimridebarber"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        // Keep TrimRideBarber isolated from the customer app Metro instance.
+        // Without this, both apps default to 8081 and can cross-load bundles.
+        resValue "integer", "react_native_dev_server_port", "8082"
+        manifestPlaceholders = [
+            GOOGLE_MAPS_API_KEY: (project.findProperty("GOOGLE_MAPS_API_KEY") ?: "")
+        ]
     }
     signingConfigs {
         debug {
@@ -110,6 +115,7 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    implementation platform('com.google.firebase:firebase-bom:33.12.0')
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
