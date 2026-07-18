@@ -1,6 +1,6 @@
 param(
   [switch]$HealthOnly,
-  [string]$FirebaseServiceAccountPath = 'C:\Users\SCHOOL\Downloads\trimride-4a485-firebase-adminsdk-fbsvc-74ec90437c.json',
+  [string]$FirebaseServiceAccountPath = 'C:\Users\SCHOOL\Downloads\trimride-4a485-firebase-adminsdk-fbsvc-e08d28f128.json',
   [string]$EmulatorId = 'emulator-5554'
 )
 
@@ -90,7 +90,7 @@ function Ensure-Metro {
     return
   }
 
-  $commandLine = "npx.cmd react-native start --host 0.0.0.0 --port $Port --no-interactive"
+  $commandLine = "npx.cmd react-native start --reset-cache --host 0.0.0.0 --port $Port --no-interactive"
   $process = Start-BackgroundCommand -WorkingDirectory $WorkingDirectory -CommandLine $commandLine -Label $Label
 
   $deadline = (Get-Date).AddSeconds(45)
