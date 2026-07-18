@@ -6,6 +6,7 @@ import { colors, spacing } from '../../theme/tokens';
 import { useAppMode } from '../../context/AppModeContext';
 import { apiClient } from '../../services/apiClient';
 import { connectSocket } from '../../services/socketClient';
+import IncomingBookingModal from '../../components/IncomingBookingModal';
 
 export default function BarberHubScreen({ navigation }) {
   const [isOnline, setIsOnline] = useState(false);
@@ -15,6 +16,7 @@ export default function BarberHubScreen({ navigation }) {
   const [simulating, setSimulating] = useState(false);
   const [refreshingRequests, setRefreshingRequests] = useState(false);
   const [newRequestAlert, setNewRequestAlert] = useState(false);
+  const [incomingRequest, setIncomingRequest] = useState(null);
   const { signOut, token, user } = useAppMode();
   const appStateRef = useRef(AppState.currentState);
 
@@ -133,8 +135,27 @@ export default function BarberHubScreen({ navigation }) {
     }
 
     const socket = connectSocket(token);
-    const onRequested = () => {
-      loadRequests();
+    const onRequested = async () => {
+      // Fetch the latest requests to get the new one
+      if (!token) return;
+      try {
+        const data = await apiClient.getBarberRequests(token);
+        if (data.length > 0) {
+          const latest = data[data.length - 1]; // or the most recent pending
+          const newRequest = {
+            id: String(latest.id),
+            customer: `${latest.first_name} ${latest.last_name}`,
+            service: latest.service_name || 'General Grooming',
+            eta: `Queue #${latest.queue_position || '-'}`,
+          };
+          setIncomingRequest(newRequest);
+        }
+        await loadRequests();
+      } catch (err) {
+        // Fallback to just loading requests
+        await loadRequests();
+      }
+
       // Vibrate device: two short pulses to alert the barber
       vibrateBookingAlert();
       playBookingPing();
@@ -188,6 +209,11 @@ export default function BarberHubScreen({ navigation }) {
     }
 
     try {
+      // Optimistically hide the modal
+      if (incomingRequest && incomingRequest.id === String(bookingId)) {
+        setIncomingRequest(null);
+      }
+
       await apiClient.respondToBooking(token, bookingId, action);
 
       if (action === 'accept') {
@@ -240,6 +266,13 @@ export default function BarberHubScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <IncomingBookingModal
+        visible={!!incomingRequest}
+        request={incomingRequest}
+        onAccept={() => respondToRequest(incomingRequest.id, 'accept')}
+        onDecline={() => respondToRequest(incomingRequest.id, 'decline')}
+        countdownSeconds={30}
+      />
       {newRequestAlert && (
         <View style={styles.alertBanner}>
           <Text style={styles.alertBannerText}>🔔  New booking request received!</Text>
