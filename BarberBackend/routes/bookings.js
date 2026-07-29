@@ -67,9 +67,9 @@ router.get('/my-requests', requireAuth, async (req, res) => {
 
     const result = await pool.query(
       `
-      SELECT b.id, b.status, b.queue_position, b.created_at,
+      SELECT b.id, b.status, b.queue_position, b.created_at, b.total_amount,
              u.first_name, u.last_name,
-             s.name AS service_name
+             s.name AS service_name, s.price AS service_price
       FROM bookings b
       JOIN users u ON b.customer_id = u.id
       LEFT JOIN services s ON b.service_id = s.id
