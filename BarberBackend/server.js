@@ -50,6 +50,7 @@ app.use('/api/bookings', require('./routes/bookings'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/reviews', require('./routes/reviews'));
+app.use('/api/chat', require('./routes/chat'));
 
 // Health endpoint — no auth, no rate-limit, exempt from request logger noise.
 // Returns DB connectivity status so uptime monitors get a meaningful signal.
