@@ -64,6 +64,67 @@ async function ensureBarberProfile(userId) {
   return created.rows[0] || null;
 }
 
+// Get live demand hotzones with surge pricing and TrimRide 20% platform royalty yield
+router.get('/hotzones/active', async (req, res) => {
+  try {
+    const hour = new Date().getHours();
+    const isPeakHour = (hour >= 7 && hour <= 10) || (hour >= 16 && hour <= 21);
+    const surgeMultiplier = isPeakHour ? 1.25 : 1.15;
+
+    const hotzones = [
+      {
+        id: 'sandton',
+        name: 'Sandton Central Hub',
+        surge: `${(surgeMultiplier * 100 - 100).toFixed(0)}% Surge Boost (${surgeMultiplier}x)`,
+        estBonus: isPeakHour ? '+$15.00/hr' : '+$12.00/hr',
+        demandLevel: 'HIGH DEMAND 🔥',
+        requestsCount: isPeakHour ? 24 : 18,
+        barbersCount: 4,
+        coordinate: { latitude: -26.1076, longitude: 28.0567 },
+        radius: 1800,
+        color: 'rgba(239, 68, 68, 0.35)',
+        stroke: '#EF4444',
+        platformCommissionRate: '20%',
+        royaltyBonusMessage: 'Surge pricing boosts Gross Fares by 25%, simultaneously raising TrimRide owner 20% commission yields!'
+      },
+      {
+        id: 'rosebank',
+        name: 'Rosebank Commerce District',
+        surge: '+15% Surge Boost (1.15x)',
+        estBonus: '+$9.00/hr',
+        demandLevel: 'MEDIUM DEMAND ⚡',
+        requestsCount: 14,
+        barbersCount: 5,
+        coordinate: { latitude: -26.1458, longitude: 28.0436 },
+        radius: 1500,
+        color: 'rgba(198, 146, 20, 0.35)',
+        stroke: '#C69214',
+        platformCommissionRate: '20%',
+        royaltyBonusMessage: 'Active merchant center with steady tip frequency.'
+      },
+      {
+        id: 'braamfontein',
+        name: 'Braamfontein University Hub',
+        surge: '+10% Surge Boost (1.10x)',
+        estBonus: '+$6.00/hr',
+        demandLevel: 'BUILDING DEMAND 📈',
+        requestsCount: 11,
+        barbersCount: 3,
+        coordinate: { latitude: -26.1924, longitude: 28.0345 },
+        radius: 1200,
+        color: 'rgba(31, 157, 85, 0.35)',
+        stroke: '#1F9D55',
+        platformCommissionRate: '20%',
+        royaltyBonusMessage: 'High student foot traffic volume.'
+      }
+    ];
+
+    res.json({ success: true, isPeakHour, hotzones });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get barber services
 router.get('/:barberId/services', async (req, res) => {
   const { barberId } = req.params;
