@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import MapView, { Circle, Marker } from 'react-native-maps';
 import { colors, spacing } from '../../theme/tokens';
+import { uberMapStyle } from '../../theme/mapStyle';
 import { apiClient } from '../../services/apiClient';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 
@@ -115,6 +116,7 @@ export default function HotzoneScreen() {
       <MapView
         ref={mapRef}
         style={styles.map}
+        customMapStyle={uberMapStyle}
         initialRegion={{
           latitude: selectedZone.coordinate.latitude,
           longitude: selectedZone.coordinate.longitude,
@@ -223,11 +225,11 @@ const styles = StyleSheet.create({
     top: spacing.md,
     left: spacing.md,
     right: spacing.md,
-    backgroundColor: '#0F1F35',
+    backgroundColor: colors.white,
     borderRadius: 20,
     padding: spacing.md,
     borderWidth: 1.2,
-    borderColor: '#3B82F6',
+    borderColor: 'rgba(0,0,0,0.1)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
@@ -235,10 +237,10 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   headerTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerTitle: { color: colors.white, fontSize: 18, fontWeight: '800' },
+  headerTitle: { color: colors.charcoal, fontSize: 18, fontWeight: '800' },
   liveSurgeBadge: { backgroundColor: '#10B981', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   liveSurgeBadgeText: { color: '#064E3B', fontSize: 10, fontWeight: '800' },
-  headerSubtitle: { color: '#94A3B8', fontSize: 12, marginTop: 4 },
+  headerSubtitle: { color: colors.steel, fontSize: 12, marginTop: 4 },
   royaltyBox: {
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
     borderWidth: 1,

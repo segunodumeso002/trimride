@@ -2,6 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppModeProvider, useAppMode } from './src/context/AppModeContext';
 import { NotificationProvider } from './src/context/NotificationContext';
 import NotificationBanner from './src/components/NotificationBanner';

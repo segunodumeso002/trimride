@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     borderRadius: 43,
     backgroundColor: colors.charcoal,
     borderWidth: 3.5,
-    borderColor: colors.accent,
+    borderColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.md,
@@ -214,12 +214,12 @@ const styles = StyleSheet.create({
     lineHeight: 34,
   },
   timerSubtext: {
-    color: colors.accent,
+    color: colors.white,
     fontSize: 11,
     fontWeight: '700',
   },
   eyebrow: {
-    color: colors.accent,
+    color: colors.steel,
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 2,
@@ -233,8 +233,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   distanceBadge: {
-    backgroundColor: 'rgba(198,146,20,0.18)',
-    borderColor: colors.accent,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.3)',
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   distanceBadgeText: {
-    color: colors.accent,
+    color: colors.white,
     fontSize: 13,
     fontWeight: '700',
   },
