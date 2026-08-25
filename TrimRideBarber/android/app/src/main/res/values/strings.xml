@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">TrimRide Barber</string>
+    <string name="debug_http_host">localhost:8082</string>
+</resources>

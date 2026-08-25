@@ -57,12 +57,16 @@ describe('Payments routes', () => {
     const app = createTestApp();
 
     pool.query
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({
         rows: [
           {
             id: 901,
             booking_id: 7,
             amount: 120,
+            tip_amount: 0,
+            platform_fee: 24,
+            barber_payout: 96,
             payment_method: 'card',
             status: 'completed',
           },
@@ -87,14 +91,19 @@ describe('Payments routes', () => {
 
     expect(pool.query).toHaveBeenNthCalledWith(
       1,
-      'INSERT INTO payments (booking_id, amount, payment_method, status) VALUES ($1, $2, $3, $4) RETURNING *',
-      [7, 120, 'card', 'completed']
+      expect.stringContaining('ALTER TABLE payments')
     );
 
     expect(pool.query).toHaveBeenNthCalledWith(
       2,
-      'UPDATE bookings SET payment_status = $1, payment_method = $2 WHERE id = $3',
-      ['paid', 'card', 7]
+      'INSERT INTO payments (booking_id, amount, tip_amount, platform_fee, barber_payout, payment_method, status) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [7, 120, 0, 24, 96, 'card', 'completed']
+    );
+
+    expect(pool.query).toHaveBeenNthCalledWith(
+      3,
+      'UPDATE bookings SET payment_status = $1, payment_method = $2, total_amount = $3 WHERE id = $4',
+      ['paid', 'card', 120, 7]
     );
   });
 

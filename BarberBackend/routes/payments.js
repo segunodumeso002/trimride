@@ -19,6 +19,10 @@ router.post('/process', async (req, res) => {
   if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
     return res.status(400).json({ error: 'amount must be a positive number' });
   }
+
+  if (!normalizedPaymentMethod) {
+    return res.status(400).json({ error: 'paymentMethod is required' });
+  }
   
   try {
     // Safe automatic database migration for live systems without dropping tables
@@ -47,6 +51,7 @@ router.post('/process', async (req, res) => {
 
     res.json({
       success: true,
+      ...(result.rows[0] || {}),
       payment: result.rows[0],
       breakdown: {
         grossFare: normalizedAmount,
