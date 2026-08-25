@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "843825142937",
+    "project_id": "trimride-4a485",
+    "storage_bucket": "trimride-4a485.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:843825142937:android:a9a1a63c26cab0f4456c08",
+        "android_client_info": {
+          "package_name": "com.barbercustomerapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "843825142937-ihqi0gn2n8o8nm1odp5d0chnqq8eqcre.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDsYW3Cuj8YoSEA-TiiNtmA1eVf1rls5vg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "843825142937-ihqi0gn2n8o8nm1odp5d0chnqq8eqcre.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:843825142937:android:5a7acb8276de80b4456c08",
+        "android_client_info": {
+          "package_name": "com.trimridebarber"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "843825142937-ihqi0gn2n8o8nm1odp5d0chnqq8eqcre.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDsYW3Cuj8YoSEA-TiiNtmA1eVf1rls5vg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "843825142937-ihqi0gn2n8o8nm1odp5d0chnqq8eqcre.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
