@@ -112,7 +112,7 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Barber Backend running on port ${PORT}`);
 });
 

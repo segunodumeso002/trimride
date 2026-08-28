@@ -14,7 +14,7 @@ export default function IncomingBookingModal({
   request,
   onAccept,
   onDecline,
-  countdownSeconds = 30,
+  countdownSeconds = 50,
 }) {
   const [timeLeft, setTimeLeft] = useState(countdownSeconds);
   const pulseAnim = useRef(new Animated.Value(1)).current;

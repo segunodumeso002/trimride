@@ -6,7 +6,7 @@ A scalable mobile application platform connecting customers with nearby barbers,
 
 ```
 Launch-codes/
-├── BarberCustomerApp/     # React Native super app (Customer + Barber roles)
+├── TrimRideCustomer/     # React Native super app (Customer + Barber roles)
 │   └── src/
 │       ├── context/        # Role/session state
 │       ├── screens/
@@ -68,7 +68,7 @@ npm run dev
 ### Mobile Apps Setup
 ```bash
 # Super App (Customer + Barber)
-cd BarberCustomerApp
+cd TrimRideCustomer
 npm install
 npx react-native run-android  # or run-ios
 ```

@@ -12,8 +12,8 @@ Wave: Windows Dev Startup Hardening + Regression Revalidation
 - `dev:stack` now starts backend + both Metro servers and reapplies `adb reverse` for `3001`, `8081`, and `8082`.
 - This removes a recurring Windows workflow failure around background `npx` startup and makes demos/restarts more repeatable.
 - Re-ran regression checks after the startup automation work:
-  - BarberCustomerApp lint: passed
-  - BarberCustomerApp tests: passed (3/3)
+  - TrimRideCustomer lint: passed
+  - TrimRideCustomer tests: passed (3/3)
   - BarberBackend tests: passed (40/40)
   - Backend syntax checks: passed
 - Budget-aware direction set for next work:
@@ -55,9 +55,9 @@ Wave 1 closes the loop: the barber can now actively participate in real-time alo
 
 ### Files Updated
 - BarberBackend/routes/barbers.js
-- BarberCustomerApp/src/services/apiClient.js
-- BarberCustomerApp/src/screens/barber/BarberHubScreen.js
-- BarberCustomerApp/src/screens/customer/TrackBarberScreen.js
+- TrimRideCustomer/src/services/apiClient.js
+- TrimRideCustomer/src/screens/barber/BarberHubScreen.js
+- TrimRideCustomer/src/screens/customer/TrackBarberScreen.js
 
 ### Cross-Check Results
 - All booking backend routes: ✅ complete (respond, location, queue, my-requests, complete)
@@ -93,9 +93,9 @@ Wave 1 closes the loop: the barber can now actively participate in real-time alo
    - Booking Status: pending
 
 ### Files Updated in This Session
-- BarberCustomerApp/android/app/src/main/AndroidManifest.xml
-- BarberCustomerApp/android/gradle.properties
-- BarberCustomerApp/src/services/apiClient.js
+- TrimRideCustomer/android/app/src/main/AndroidManifest.xml
+- TrimRideCustomer/android/gradle.properties
+- TrimRideCustomer/src/services/apiClient.js
 - BarberBackend/routes/customers.js
 
 ## Completed Today (April 7, 2026)
@@ -114,7 +114,7 @@ Wave: Session Hardening (No paid dependencies)
 - Prevented duplicate socket listeners when reconnecting session.
 
 Updated file:
-- BarberCustomerApp/src/context/AppModeContext.js
+- TrimRideCustomer/src/context/AppModeContext.js
 
 ## Validation Run (Post-Wave)
 - Frontend lint: passed
@@ -130,10 +130,10 @@ Wave: Runtime Endpoint Environment Strategy (API + Socket)
 - Documented environment strategy in the app README.
 
 Updated files:
-- BarberCustomerApp/src/config/runtimeConfig.js
-- BarberCustomerApp/src/services/apiClient.js
-- BarberCustomerApp/src/services/socketClient.js
-- BarberCustomerApp/README.md
+- TrimRideCustomer/src/config/runtimeConfig.js
+- TrimRideCustomer/src/services/apiClient.js
+- TrimRideCustomer/src/services/socketClient.js
+- TrimRideCustomer/README.md
 
 ## Validation Run (Post-Wave)
 - Frontend lint: passed
@@ -298,7 +298,7 @@ Updated files:
 
 ## Wave Completed Just Now
 Wave: Android Release Build Smoke Test
-- Executed Android release smoke build from `BarberCustomerApp/android` using `gradlew.bat assembleRelease`.
+- Executed Android release smoke build from `TrimRideCustomer/android` using `gradlew.bat assembleRelease`.
 - Build finished successfully (`BUILD SUCCESSFUL`), confirming release pipeline viability for Android packaging.
 - Captured major warning categories in release evidence docs (SDK XML/CXX warnings, third-party deprecations, Gradle deprecation notices, manifest namespace warnings).
 
@@ -317,8 +317,8 @@ Wave: Role Routing Test Coverage
 - Verified signed-in barber renders barber stack.
 
 Updated files:
-- BarberCustomerApp/__tests__/App.test.tsx
-- BarberCustomerApp/jest.setup.js
+- TrimRideCustomer/__tests__/App.test.tsx
+- TrimRideCustomer/jest.setup.js
 
 ## Wave Completed Just Now
 Wave: Android Maps Key Hardening (Production Readiness)
@@ -328,9 +328,9 @@ Wave: Android Maps Key Hardening (Production Readiness)
 - Added README setup note for local key injection through `android/gradle.properties`.
 
 Updated files:
-- BarberCustomerApp/android/app/src/main/AndroidManifest.xml
-- BarberCustomerApp/android/app/build.gradle
-- BarberCustomerApp/README.md
+- TrimRideCustomer/android/app/src/main/AndroidManifest.xml
+- TrimRideCustomer/android/app/build.gradle
+- TrimRideCustomer/README.md
 
 ## Validation Run (Post-Wave)
 - Frontend lint: passed
@@ -344,7 +344,7 @@ Hotfix: Dispatch Empty-State During Emulator Test
 - Verified dispatch API now returns barber data and queue count for customer view.
 
 Updated file:
-- BarberCustomerApp/src/screens/customer/CustomerHomeScreen.js
+- TrimRideCustomer/src/screens/customer/CustomerHomeScreen.js
 
 ## Hotfix Completed
 Hotfix: Service Filter Empty Results (fade/braids)
@@ -363,8 +363,8 @@ Hotfix: Request Booking Payload (barberId required)
 - Request flow now validates resolved barberId before calling booking endpoint.
 
 Updated files:
-- BarberCustomerApp/src/screens/customer/CustomerHomeScreen.js
-- BarberCustomerApp/src/screens/customer/RequestBarberScreen.js
+- TrimRideCustomer/src/screens/customer/CustomerHomeScreen.js
+- TrimRideCustomer/src/screens/customer/RequestBarberScreen.js
 
 ## Runtime Fix Completed
 Runtime: Stale Backend Process (route changes not loaded)
@@ -379,9 +379,9 @@ Wave: Queue Visibility (Uber-style Waiting Context)
 - Tracking screen now displays clients ahead and queue number.
 
 Updated files:
-- BarberCustomerApp/src/services/apiClient.js
-- BarberCustomerApp/src/screens/customer/RequestBarberScreen.js
-- BarberCustomerApp/src/screens/customer/TrackBarberScreen.js
+- TrimRideCustomer/src/services/apiClient.js
+- TrimRideCustomer/src/screens/customer/RequestBarberScreen.js
+- TrimRideCustomer/src/screens/customer/TrackBarberScreen.js
 
 ## Validation Run (Post-Wave)
 - Frontend lint: passed
@@ -402,7 +402,7 @@ Wave: Dispatch Reliability + Customer Fallback UX (No paid dependencies)
 - Kept prior architecture and backend contract intact.
 
 Updated file:
-- BarberCustomerApp/src/screens/customer/CustomerHomeScreen.js
+- TrimRideCustomer/src/screens/customer/CustomerHomeScreen.js
 
 ## Validation Run (Post-Wave)
 - Frontend lint: passed
@@ -420,7 +420,7 @@ Wave: Android Crash Hotfix - Customer Login Transition
 - This removes crash path and keeps customer testing unblocked.
 
 Updated file:
-- BarberCustomerApp/src/screens/customer/CustomerHomeScreen.js
+- TrimRideCustomer/src/screens/customer/CustomerHomeScreen.js
 
 ## Validation Run (Post-Wave)
 - Frontend lint: passed
@@ -437,8 +437,8 @@ Wave: Customer Flow Navigation Safety
 - Added session-required fallback in tracking screen to prevent edge-case crashes.
 
 Updated files:
-- BarberCustomerApp/src/screens/customer/RequestBarberScreen.js
-- BarberCustomerApp/src/screens/customer/TrackBarberScreen.js
+- TrimRideCustomer/src/screens/customer/RequestBarberScreen.js
+- TrimRideCustomer/src/screens/customer/TrackBarberScreen.js
 
 ## Validation Run (Post-Wave)
 - Frontend lint: passed
@@ -461,9 +461,10 @@ Wave: Role-Based Navigation Activation (Customer + Barber)
 - Added landing CTA for barber sign-in path (`Continue as Barber`).
 
 Updated files:
-- BarberCustomerApp/App.tsx
-- BarberCustomerApp/src/screens/shared/LandingScreen.js
+- TrimRideCustomer/App.tsx
+- TrimRideCustomer/src/screens/shared/LandingScreen.js
 
 ## Validation Run (Post-Wave)
 - Frontend lint: passed
 - Frontend tests: passed
+

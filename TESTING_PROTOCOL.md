@@ -7,7 +7,7 @@ This is the required test routine after each implementation wave.
 Run these before adding new features:
 
 ```bash
-npm --prefix BarberCustomerApp run lint
+npm --prefix TrimRideCustomer run lint
 node --check BarberBackend/server.js
 node --check BarberBackend/routes/auth.js
 node --check BarberBackend/routes/barbers.js
@@ -20,8 +20,8 @@ node --check BarberBackend/routes/bookings.js
 Run these after every wave:
 
 ```bash
-npm --prefix BarberCustomerApp run lint
-npm --prefix BarberCustomerApp test -- --watch=false
+npm --prefix TrimRideCustomer run lint
+npm --prefix TrimRideCustomer test -- --watch=false
 node --check BarberBackend/server.js
 node --check BarberBackend/middleware/auth.js
 node --check BarberBackend/routes/auth.js
@@ -43,14 +43,14 @@ npm run dev
 ### Start mobile bundler
 
 ```bash
-cd BarberCustomerApp
+cd TrimRideCustomer
 npm start
 ```
 
 ### Run Android app
 
 ```bash
-cd BarberCustomerApp
+cd TrimRideCustomer
 npm run android
 ```
 
@@ -93,3 +93,4 @@ npm run android
 2. Fix failing test/lint/syntax issue.
 3. Re-run full protocol.
 4. Continue only when all checks pass.
+

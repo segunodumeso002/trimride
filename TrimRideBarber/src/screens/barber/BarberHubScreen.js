@@ -283,7 +283,7 @@ export default function BarberHubScreen({ navigation }) {
           ReactNativeHapticFeedback.trigger('notificationError', { enableVibrateFallback: true });
           respondToRequest(incomingRequest.id, 'decline');
         }}
-        countdownSeconds={30}
+        countdownSeconds={50}
       />
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -519,6 +519,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: spacing.md,
     marginTop: spacing.md,
+    marginBottom: spacing.md,
   },
   summaryTitle: {
     color: colors.charcoal,

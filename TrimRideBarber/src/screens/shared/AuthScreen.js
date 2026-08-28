@@ -57,7 +57,7 @@ export default function AuthScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
         {/* Brand */}
@@ -82,7 +82,7 @@ export default function AuthScreen() {
             <TextInput
               style={styles.input}
               placeholder="e.g. Mike"
-              placeholderTextColor="#5a5a5a"
+              placeholderTextColor={colors.steel}
               value={firstName}
               onChangeText={setFirstName}
             />
@@ -90,7 +90,7 @@ export default function AuthScreen() {
             <TextInput
               style={styles.input}
               placeholder="e.g. Dlamini"
-              placeholderTextColor="#5a5a5a"
+              placeholderTextColor={colors.steel}
               value={lastName}
               onChangeText={setLastName}
             />
@@ -98,7 +98,7 @@ export default function AuthScreen() {
             <TextInput
               style={styles.input}
               placeholder="+27 71 234 5678"
-              placeholderTextColor="#5a5a5a"
+              placeholderTextColor={colors.steel}
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
@@ -110,7 +110,7 @@ export default function AuthScreen() {
         <TextInput
           style={styles.input}
           placeholder="you@example.com"
-          placeholderTextColor="#5a5a5a"
+          placeholderTextColor={colors.steel}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -121,7 +121,7 @@ export default function AuthScreen() {
         <TextInput
           style={styles.input}
           placeholder={mode === 'signup' ? 'Min. 8 characters' : '••••••••'}
-          placeholderTextColor="#5a5a5a"
+          placeholderTextColor={colors.steel}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
@@ -157,7 +157,7 @@ export default function AuthScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0a0a0a' },
+  root: { flex: 1, backgroundColor: colors.white },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.lg,
@@ -166,64 +166,69 @@ const styles = StyleSheet.create({
   },
   brandRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: spacing.xl },
   brand: {
-    color: colors.accent,
-    fontSize: 22,
+    color: colors.ink,
+    fontSize: 24,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: -0.5,
   },
   brandSub: {
-    color: '#666',
-    fontSize: 13,
-    fontWeight: '600',
-    marginLeft: 8,
+    color: colors.success,
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 6,
     marginBottom: 2,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   headline: {
-    color: '#ffffff',
-    fontSize: 32,
+    color: colors.ink,
+    fontSize: 34,
     fontWeight: '800',
+    letterSpacing: -1,
     marginBottom: spacing.xs,
   },
   sub: {
-    color: '#777',
-    fontSize: 15,
-    lineHeight: 22,
+    color: colors.steel,
+    fontSize: 16,
+    lineHeight: 24,
     marginBottom: spacing.xl,
   },
   label: {
-    color: '#888',
-    fontSize: 12,
+    color: colors.charcoal,
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    marginBottom: 6,
-    marginTop: spacing.sm,
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    marginTop: spacing.md,
   },
   input: {
-    backgroundColor: '#141414',
+    backgroundColor: colors.whisper,
     borderWidth: 1,
-    borderColor: '#252525',
+    borderColor: colors.lightGray,
     borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    color: '#ffffff',
+    paddingVertical: 16,
+    color: colors.ink,
     fontSize: 16,
     marginBottom: 4,
   },
   btn: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.ink,
     borderRadius: 14,
-    paddingVertical: 16,
+    paddingVertical: 18,
     alignItems: 'center',
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  btnText: { color: colors.ink, fontWeight: '800', fontSize: 16 },
+  btnText: { color: colors.white, fontWeight: '800', fontSize: 17, letterSpacing: 0.5 },
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
   },
-  switchLabel: { color: '#666', fontSize: 14 },
-  switchLink: { color: colors.accent, fontSize: 14, fontWeight: '700' },
+  switchLabel: { color: colors.steel, fontSize: 15 },
+  switchLink: { color: colors.success, fontSize: 15, fontWeight: '700' },
 });

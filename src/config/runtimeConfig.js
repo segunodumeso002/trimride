@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 const DEV_SOCKET_BASE_BY_PLATFORM = {
-  android: 'http://10.0.2.2:3001',
+  android: 'http://localhost:3001',
   ios: 'http://localhost:3001',
   default: 'http://localhost:3001',
 };

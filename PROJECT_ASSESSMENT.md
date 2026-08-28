@@ -6,7 +6,7 @@
 
 ## 📋 Executive Summary
 
-Both the **BarberCustomerApp** and **TrimRideBarber** apps are **fully functional with real-time features verified working**. The project has successfully:
+Both the **TrimRideCustomer** and **TrimRideBarber** apps are **fully functional with real-time features verified working**. The project has successfully:
 - ✅ Implemented end-to-end real-time booking flow (Customer → Barber notification → Acceptance → Customer alert)
 - ✅ Integrated Firebase Cloud Messaging (FCM) with audio alerts
 - ✅ Established Socket.io real-time sync with polling backup
@@ -113,28 +113,28 @@ Both the **BarberCustomerApp** and **TrimRideBarber** apps are **fully functiona
 
 ## 🔧 Technical Implementation Details
 
-### BarberCustomerApp
+### TrimRideCustomer
 
 **Critical Files**:
-1. [BarberCustomerApp/src/context/AppModeContext.js](BarberCustomerApp/src/context/AppModeContext.js)
+1. [TrimRideCustomer/src/context/AppModeContext.js](TrimRideCustomer/src/context/AppModeContext.js)
    - Auth hub, socket initialization, FCM token lifecycle
    - `ENABLE_FCM = true` flag is active
    - Auto-registers FCM token on login
    - Attaches socket event listeners for booking updates
 
-2. [BarberCustomerApp/src/screens/customer/CustomerHomeScreen.js](BarberCustomerApp/src/screens/customer/CustomerHomeScreen.js)
+2. [TrimRideCustomer/src/screens/customer/CustomerHomeScreen.js](TrimRideCustomer/src/screens/customer/CustomerHomeScreen.js)
    - Displays nearby barbers, active booking banner
    - Socket listener for `booking-status-updated` events
    - 5-second polling fallback for status refresh
    - Banner updates instantly when barber accepts
 
-3. [BarberCustomerApp/src/screens/customer/TrackBarberScreen.js](BarberCustomerApp/src/screens/customer/TrackBarberScreen.js)
+3. [TrimRideCustomer/src/screens/customer/TrackBarberScreen.js](TrimRideCustomer/src/screens/customer/TrackBarberScreen.js)
    - Real-time barber location tracking with map
    - `refreshLatestStatus()` fetches latest booking status
    - Socket reconnect handler rejoins booking room
    - 6-second polling interval ensures sync
 
-4. [BarberCustomerApp/android/app/build.gradle](BarberCustomerApp/android/app/build.gradle)
+4. [TrimRideCustomer/android/app/build.gradle](TrimRideCustomer/android/app/build.gradle)
    - `bundleReleaseJsAndAssets = true` for debug buildType
    - Creates `createBundleDebugJsAndAssets` task
    - play-services-location pinned to 18.0.0
@@ -158,7 +158,7 @@ Both the **BarberCustomerApp** and **TrimRideBarber** apps are **fully functiona
 - Uses separate Metro port (8082) to run alongside customer app
 - Needs barber-specific screens for accepting bookings and tracking customers
 
-**Next Phase**: Mirror BarberCustomerApp FCM integration + implement barber-side booking response UI
+**Next Phase**: Mirror TrimRideCustomer FCM integration + implement barber-side booking response UI
 
 ---
 
@@ -213,7 +213,7 @@ Both the **BarberCustomerApp** and **TrimRideBarber** apps are **fully functiona
 **Steps**:
 1. ✅ Started backend on port 3001
 2. ✅ Started Metro servers: port 8081 (customer) & 8082 (barber)
-3. ✅ Launched BarberCustomerApp on emulator
+3. ✅ Launched TrimRideCustomer on emulator
 4. ✅ Customer initiated booking for barber
 5. ✅ **Barber received FCM push notification with audio alert**
 6. ✅ Barber accepted booking in UI
@@ -246,7 +246,7 @@ Both the **BarberCustomerApp** and **TrimRideBarber** apps are **fully functiona
 - **Issue**: Barber app has Firebase libraries but FCM not enabled in code
 - **Impact**: Barber app won't receive push notifications (socket events still work)
 - **Status**: ⚠️ **Needs implementation** - Backend can send, but app won't display
-- **Fix**: Mirror BarberCustomerApp `AppModeContext.js` FCM implementation (~15 min task)
+- **Fix**: Mirror TrimRideCustomer `AppModeContext.js` FCM implementation (~15 min task)
 
 ### 4. **Barber Booking Response Flow - MISSING FEATURE**
 - **Issue**: TrimRideBarber doesn't have UI for accepting/rejecting bookings
@@ -310,7 +310,7 @@ Both the **BarberCustomerApp** and **TrimRideBarber** apps are **fully functiona
 ### Real-Time Event Flow
 ```
 Customer App                Socket.io                Backend                FCM
-(BarberCustomerApp)        (Port 3001)            (Node.js/Express)      (Firebase)
+(TrimRideCustomer)        (Port 3001)            (Node.js/Express)      (Firebase)
       │
       ├─────── booking-requested ──────────────────────►│
       │                                                   │
@@ -420,7 +420,7 @@ Firebase Admin SDK initialized
 
 ### Step 2: Start Customer Metro (Second Terminal)
 ```powershell
-Push-Location "c:\Users\SCHOOL\Desktop\Launch-codes\BarberCustomerApp"
+Push-Location "c:\Users\SCHOOL\Desktop\Launch-codes\TrimRideCustomer"
 npx react-native start --host 0.0.0.0 --port 8081
 ```
 **Expected Output**:
@@ -476,7 +476,7 @@ tcp:3001 tcp:3001
 ### Step 6: Build & Deploy Apps (Sixth Terminal)
 ```powershell
 # Customer app
-Push-Location "c:\Users\SCHOOL\Desktop\Launch-codes\BarberCustomerApp"
+Push-Location "c:\Users\SCHOOL\Desktop\Launch-codes\TrimRideCustomer"
 npx react-native run-android --active-arch-only
 
 # Wait for success, then barber app (same terminal)
@@ -492,7 +492,7 @@ npx react-native run-android --active-arch-only --port 8082
 - [ ] Barber Metro showing "Listening on http://0.0.0.0:8082"
 - [ ] Emulator device listed in `adb devices`
 - [ ] ADB reverse showing all three ports
-- [ ] BarberCustomerApp launches without red screen
+- [ ] TrimRideCustomer launches without red screen
 - [ ] TrimRideBarber launches without red screen
 - [ ] Both apps show home screens (barbers list / booking interface)
 
@@ -516,7 +516,7 @@ Launch-codes/
 │   │   └── pushService.js        # Firebase Admin SDK ← NEW
 │   └── models/schema.sql         # Database schema
 │
-├── BarberCustomerApp/            # React Native customer app
+├── TrimRideCustomer/            # React Native customer app
 │   ├── App.tsx                   # App entry point
 │   ├── src/
 │   │   ├── context/
@@ -594,7 +594,7 @@ $env:FIREBASE_SERVICE_ACCOUNT_PATH = "C:\Users\SCHOOL\Downloads\trimride-4a485-f
 
 **Terminal 2 - Customer Metro**:
 ```powershell
-Push-Location "c:\Users\SCHOOL\Desktop\Launch-codes\BarberCustomerApp"; npx react-native start --host 0.0.0.0 --port 8081
+Push-Location "c:\Users\SCHOOL\Desktop\Launch-codes\TrimRideCustomer"; npx react-native start --host 0.0.0.0 --port 8081
 ```
 
 **Terminal 3 - Barber Metro**:
@@ -675,4 +675,5 @@ $emulator = "$env:LOCALAPPDATA\Android\Sdk\emulator\emulator.exe"; & $emulator -
 
 **Report Generated**: May 6, 2026 at 14:45  
 **System Status**: Ready for restart ✅
+
 

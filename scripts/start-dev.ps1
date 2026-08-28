@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $backendPath = Join-Path $repoRoot 'BarberBackend'
-$customerAppPath = Join-Path $repoRoot 'BarberCustomerApp'
+$customerAppPath = Join-Path $repoRoot 'TrimRideCustomer'
 $barberAppPath = Join-Path $repoRoot 'TrimRideBarber'
 $adbPath = Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'
 
