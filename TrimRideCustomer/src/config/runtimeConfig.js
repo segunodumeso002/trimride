@@ -1,9 +1,9 @@
 import { Platform } from 'react-native';
 
 const DEV_SOCKET_BASE_BY_PLATFORM = {
-  android: 'http://localhost:3001',
-  ios: 'http://localhost:3001',
-  default: 'http://localhost:3001',
+  android: 'http://barber-env.eba-ms3zgfkh.us-east-2.elasticbeanstalk.com',
+  ios: 'http://barber-env.eba-ms3zgfkh.us-east-2.elasticbeanstalk.com',
+  default: 'http://barber-env.eba-ms3zgfkh.us-east-2.elasticbeanstalk.com',
 };
 
 const ENV_PRESETS = {

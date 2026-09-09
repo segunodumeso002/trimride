@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+service-account*.json
+
+# Logs
+npm-debug.log*
+*.log
+
+# Build artifacts
+build/
+dist/
+coverage/
+android/app/build/
+android/build/
+android/.gradle/
+ios/build/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml

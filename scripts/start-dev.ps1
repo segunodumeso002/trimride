@@ -116,16 +116,18 @@ function Ensure-AdbReverse {
     return
   }
 
-  if (-not ($devices -match ("^{0}\s+device$" -f [regex]::Escape($EmulatorId)))) {
-    Write-Warning ("Emulator {0} not connected; skipping reverse port setup." -f $EmulatorId)
+  $connectedDevices = $devices | Where-Object { $_ -match '\sdevice$' } | ForEach-Object { ($_ -split '\s+')[0] }
+  if ($connectedDevices.Count -eq 0) {
+    Write-Warning "No active ADB devices connected; skipping reverse port setup."
     return
   }
 
-  foreach ($port in 3001, 8081, 8082) {
-    & $adb -s $EmulatorId reverse ("tcp:{0}" -f $port) ("tcp:{0}" -f $port) | Out-Null
+  foreach ($device in $connectedDevices) {
+    foreach ($port in 3001, 8081, 8082) {
+      & $adb -s $device reverse ("tcp:{0}" -f $port) ("tcp:{0}" -f $port) | Out-Null
+    }
+    Write-Host ("ADB reverse applied for {0}: 3001, 8081, 8082." -f $device)
   }
-
-  Write-Host ("ADB reverse applied for {0}: 3001, 8081, 8082." -f $EmulatorId)
 }
 
 function Show-Health {

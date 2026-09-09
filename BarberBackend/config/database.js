@@ -1,11 +1,14 @@
 const { Pool } = require('pg');
 
 const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'barber_app',
-  password: process.env.DB_PASSWORD || '',
-  port: process.env.DB_PORT || 5432,
+  user: process.env.DB_USER || process.env.RDS_USERNAME || 'postgres',
+  host: process.env.DB_HOST || process.env.RDS_HOSTNAME || 'localhost',
+  database: process.env.DB_NAME || process.env.RDS_DB_NAME || 'barber_app',
+  password: process.env.DB_PASSWORD || process.env.RDS_PASSWORD || '',
+  port: process.env.DB_PORT || process.env.RDS_PORT || 5432,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 // Test connection

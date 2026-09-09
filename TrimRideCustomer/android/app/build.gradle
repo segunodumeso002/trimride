@@ -76,6 +76,12 @@ android {
     ndkVersion rootProject.ext.ndkVersion    
     compileSdk rootProject.ext.compileSdkVersion
 
+    externalNativeBuild {
+        cmake {
+            buildStagingDirectory "C:/tmp/TRC_cxx"
+        }
+    }
+
     namespace "com.trimridecustomer"
     defaultConfig {
         applicationId "com.trimridecustomer"

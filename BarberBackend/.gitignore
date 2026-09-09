@@ -10,6 +10,7 @@ node_modules/
 *.pfx
 service-account*.json
 firebase-service-account*.json
+trimride-firebase-adminsdk.json
 
 # Logs
 npm-debug.log*
@@ -28,3 +29,8 @@ ios/build/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml

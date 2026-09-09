@@ -76,6 +76,12 @@ android {
     ndkVersion rootProject.ext.ndkVersion    
     compileSdk rootProject.ext.compileSdkVersion
 
+    externalNativeBuild {
+        cmake {
+            buildStagingDirectory "C:/tmp/TRB_cxx"
+        }
+    }
+
     namespace "com.trimridebarber"
     defaultConfig {
         applicationId "com.trimridebarber"
