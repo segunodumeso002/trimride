@@ -21,7 +21,12 @@ app.use(requestLogger);
 
 // Serve static uploads
 const path = require('path');
-app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+const fs = require('fs');
+const uploadsDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir));
 
 // Rate limiting
 const isDevelopment = process.env.NODE_ENV !== 'production';

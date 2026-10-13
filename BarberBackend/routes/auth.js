@@ -14,14 +14,24 @@ const {
 } = require('../services/firebaseAuthService');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+
+const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'public/uploads/')
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname || '') || '.jpg';
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
   }
 });
 const upload = multer({ storage: storage });
@@ -32,7 +42,7 @@ const registerSchema = Joi.object({
   firstName: Joi.string().trim().min(1).max(50).required(),
   lastName:  Joi.string().trim().min(1).max(50).required(),
   userType:  Joi.string().valid('customer', 'barber').required(),
-  phone:     Joi.string().trim().max(16).optional().allow('', null).custom((value, helpers) => {
+  phone:     Joi.string().trim().max(30).optional().allow('', null).custom((value, helpers) => {
     if (value === '' || value == null) {
       return value;
     }
@@ -50,8 +60,8 @@ const registerSchema = Joi.object({
   city:      Joi.string().trim().optional().allow('', null),
   state:     Joi.string().trim().optional().allow('', null),
   country:   Joi.string().trim().optional().allow('', null),
-  latitude:  Joi.number().optional(),
-  longitude: Joi.number().optional(),
+  latitude:  Joi.number().optional().allow('', null).empty(''),
+  longitude: Joi.number().optional().allow('', null).empty(''),
 });
 
 const loginSchema = Joi.object({
@@ -80,7 +90,7 @@ async function ensureBarberProfile(userType, userId, firstName, lastName, addres
   }
 
   const shopName = `${firstName} ${lastName} Barber`;
-  const defaultAddress = 'Setup pending';
+  const defaultAddress = address || 'Setup pending';
   
   await pool.query(
     `INSERT INTO barber_profiles (
