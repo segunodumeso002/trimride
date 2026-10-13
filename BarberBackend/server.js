@@ -19,6 +19,10 @@ app.use(express.json());
 // Request logging (before routes so every request is captured)
 app.use(requestLogger);
 
+// Serve static uploads
+const path = require('path');
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+
 // Rate limiting
 const isDevelopment = process.env.NODE_ENV !== 'production';
 const limiter = rateLimit({

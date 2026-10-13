@@ -36,6 +36,15 @@ This repository contains the backend API for the TrimRide barber booking platfor
 npm test
 ```
 
+## Existing database migration
+Before deploying the registration contact-field changes to an existing database, take a database backup and verify the backend environment targets the intended database, then run:
+
+```bash
+npm run db:migrate:registration-contact
+```
+
+The migration only adds missing contact columns to `users` and `barber_profiles`; it does not delete or rewrite existing records.
+
 ## Notes
 - Keep secrets such as Firebase service account files and environment variables out of version control.
 - The repository is intended for ongoing development and backup of the current project state.

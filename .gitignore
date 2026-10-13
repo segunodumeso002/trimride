@@ -11,6 +11,9 @@ node_modules/
 **/ios/build/
 **/dist/
 **/build/
+.gradle/
+**/.gradle/
+*.zip
 
 # Logs
 *.log

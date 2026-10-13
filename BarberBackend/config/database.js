@@ -6,9 +6,7 @@ const pool = new Pool({
   database: process.env.DB_NAME || process.env.RDS_DB_NAME || 'barber_app',
   password: process.env.DB_PASSWORD || process.env.RDS_PASSWORD || '',
   port: process.env.DB_PORT || process.env.RDS_PORT || 5432,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 // Test connection

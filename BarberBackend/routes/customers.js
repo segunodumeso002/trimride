@@ -5,7 +5,10 @@ const requireAuth = require('../middleware/auth');
 const { sendPushToUser } = require('../services/pushService');
 
 function normalizedEnvEmail(key) {
-  if (process.env.NODE_ENV === 'test') {
+  if (
+    process.env.NODE_ENV === 'test' ||
+    String(process.env.DEMO_MODE || '').toLowerCase() !== 'true'
+  ) {
     return '';
   }
   return String(process.env[key] || '').trim().toLowerCase();
@@ -38,7 +41,7 @@ router.post('/book', requireAuth, async (req, res) => {
     }
 
     const customerEmail = String(customerResult.rows[0].email || '').toLowerCase();
-    if (demoLockedCustomerEmail && customerEmail !== demoLockedCustomerEmail) {
+    if (demoLockedCustomerEmail && !demoLockedCustomerEmail.split(',').map(e => e.trim()).includes(customerEmail)) {
       return res.status(403).json({
         error: 'Demo mode: this customer account is not allowed to place bookings.',
       });
@@ -64,7 +67,7 @@ router.post('/book', requireAuth, async (req, res) => {
     }
 
     const selectedBarberEmail = String(selectedBarber.email || '').toLowerCase();
-    if (demoLockedBarberEmail && selectedBarberEmail !== demoLockedBarberEmail) {
+    if (demoLockedBarberEmail && !demoLockedBarberEmail.split(',').map(e => e.trim()).includes(selectedBarberEmail)) {
       return res.status(403).json({
         error: 'Demo mode: only the demo barber account can receive requests.',
       });

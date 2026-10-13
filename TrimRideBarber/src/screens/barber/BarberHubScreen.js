@@ -13,6 +13,7 @@ import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 export default function BarberHubScreen({ navigation }) {
   const [isOnline, setIsOnline] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState(false);
+  const [queueCount, setQueueCount] = useState(0);
   const [requests, setRequests] = useState([]);
   const [activeSimulationBookingId, setActiveSimulationBookingId] = useState(null);
   const [simulating, setSimulating] = useState(false);
@@ -64,6 +65,7 @@ export default function BarberHubScreen({ navigation }) {
     try {
       const result = await apiClient.getBarberOnlineStatus(token);
       setIsOnline(!!result?.isOnline);
+      setQueueCount(result?.queue_count || 0);
     } catch (_error) {
       setIsOnline(false);
     }
@@ -209,6 +211,20 @@ export default function BarberHubScreen({ navigation }) {
     }
   };
 
+  const updateQueue = async (action) => {
+    if (!token) return;
+    try {
+      setQueueCount(prev => action === 'increment' ? prev + 1 : Math.max(0, prev - 1));
+      const res = await apiClient.updateBarberQueue(token, action);
+      if (res && res.queue_count !== undefined) {
+        setQueueCount(res.queue_count);
+      }
+    } catch (err) {
+      Alert.alert('Error', err.message);
+      loadOnlineStatus();
+    }
+  };
+
   const respondToRequest = async (bookingId, action) => {
     if (!token) {
       return;
@@ -322,6 +338,20 @@ export default function BarberHubScreen({ navigation }) {
               ? 'Stay online to receive nearby bookings and respond quickly.'
               : 'Switch online when you are ready to receive new customers.'}
           </Text>
+          
+          {isOnline && (
+            <View style={styles.queueControlContainer}>
+              <Text style={styles.queueControlTitle}>Current Queue: {queueCount}</Text>
+              <View style={styles.queueControlButtons}>
+                <TouchableOpacity style={styles.queueBtn} onPress={() => updateQueue('decrement')}>
+                  <Text style={styles.queueBtnText}>-</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.queueBtn} onPress={() => updateQueue('increment')}>
+                  <Text style={styles.queueBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
 
         <TouchableOpacity
@@ -531,6 +561,39 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     lineHeight: 20,
   },
+  queueControlContainer: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.soft,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  queueControlTitle: {
+    color: colors.charcoal,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  queueControlButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  queueBtn: {
+    backgroundColor: colors.whisper,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.lightGray,
+  },
+  queueBtnText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.ink,
+  },
   hotzoneButton: {
     marginTop: spacing.md,
     backgroundColor: colors.ink,
@@ -582,15 +645,23 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: colors.soft,
+    overflow: 'hidden',
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.sm,
   },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: colors.charcoal },
+  cardTitle: { 
+    flex: 1,
+    fontSize: 16, 
+    fontWeight: '700', 
+    color: colors.charcoal,
+    marginRight: spacing.xs,
+  },
   queueBadge: {
+    flexShrink: 0,
     backgroundColor: colors.paper,
     color: colors.charcoal,
     fontWeight: '700',
@@ -599,6 +670,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
     overflow: 'hidden',
+    alignSelf: 'flex-start',
   },
   meta: { marginTop: spacing.xs, color: colors.steel },
   emptyCard: {

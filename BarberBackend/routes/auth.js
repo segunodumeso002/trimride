@@ -5,12 +5,26 @@ const jwt = require('jsonwebtoken');
 const pool = require('../config/database');
 const requireAuth = require('../middleware/auth');
 const { validate, Joi } = require('../middleware/validate');
+const { parsePhoneNumberFromString } = require('libphonenumber-js/max');
 const {
   isFirebaseAuthEnabled,
   createFirebaseUser,
   deleteFirebaseUser,
   signInWithFirebasePassword,
 } = require('../services/firebaseAuthService');
+const multer = require('multer');
+const path = require('path');
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'public/uploads/')
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+  }
+});
+const upload = multer({ storage: storage });
 
 const registerSchema = Joi.object({
   email:     Joi.string().email().max(254).required(),
@@ -18,7 +32,26 @@ const registerSchema = Joi.object({
   firstName: Joi.string().trim().min(1).max(50).required(),
   lastName:  Joi.string().trim().min(1).max(50).required(),
   userType:  Joi.string().valid('customer', 'barber').required(),
-  phone:     Joi.string().trim().max(20).optional().allow('', null),
+  phone:     Joi.string().trim().max(16).optional().allow('', null).custom((value, helpers) => {
+    if (value === '' || value == null) {
+      return value;
+    }
+
+    const parsedPhone = parsePhoneNumberFromString(value);
+    if (!parsedPhone || !parsedPhone.isValid()) {
+      return helpers.error('string.invalidPhone');
+    }
+
+    return parsedPhone.number;
+  }).messages({
+    'string.invalidPhone': 'Enter a valid phone number with its country calling code.',
+  }),
+  address:   Joi.string().trim().optional().allow('', null),
+  city:      Joi.string().trim().optional().allow('', null),
+  state:     Joi.string().trim().optional().allow('', null),
+  country:   Joi.string().trim().optional().allow('', null),
+  latitude:  Joi.number().optional(),
+  longitude: Joi.number().optional(),
 });
 
 const loginSchema = Joi.object({
@@ -30,33 +63,41 @@ function createJwtForUser(userId) {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
 }
 
-async function createLocalUser({ email, password, firstName, lastName, userType, phone }) {
+async function createLocalUser({ email, password, firstName, lastName, userType, phone, profile_image, address, city, state, country }) {
   const hashedPassword = await bcrypt.hash(password, 10);
 
   const result = await pool.query(
-    'INSERT INTO users (email, password_hash, first_name, last_name, user_type, phone) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, first_name, last_name, user_type',
-    [email, hashedPassword, firstName, lastName, userType, phone]
+    'INSERT INTO users (email, password_hash, first_name, last_name, user_type, phone, profile_image, address, city, state, country) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, email, first_name, last_name, user_type',
+    [email, hashedPassword, firstName, lastName, userType, phone || null, profile_image, address || null, city || null, state || null, country || null]
   );
 
   return result.rows[0];
 }
 
-async function ensureBarberProfile(userType, userId, firstName, lastName) {
+async function ensureBarberProfile(userType, userId, firstName, lastName, address, city, state, country, shop_image, latitude, longitude) {
   if (userType !== 'barber') {
     return;
   }
 
+  const shopName = `${firstName} ${lastName} Barber`;
+  const defaultAddress = 'Setup pending';
+  
   await pool.query(
     `INSERT INTO barber_profiles (
-       user_id, shop_name, shop_address, latitude, longitude, description,
+       user_id, shop_name, shop_address, address, city, state, country, shop_image, latitude, longitude, description,
        is_active, rating, queue_count, estimated_wait_time
-     ) VALUES ($1, $2, $3, $4, $5, $6, false, 0.00, 0, 0)`,
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, false, 0.00, 0, 0)`,
     [
       userId,
-      `${firstName} ${lastName} Barber`,
-      'Setup pending',
-      0,
-      0,
+      shopName,
+      defaultAddress,
+      address || null,
+      city || null,
+      state || null,
+      country || 'USA',
+      shop_image || null,
+      latitude || 0,
+      longitude || 0,
       'Profile setup pending',
     ]
   );
@@ -72,8 +113,20 @@ function isFirebaseInvalidCredential(errorCode) {
 }
 
 // Register
-router.post('/register', validate(registerSchema), async (req, res) => {
-  const { email, password, firstName, lastName, userType, phone } = req.body;
+router.post('/register', upload.fields([{ name: 'profile_image', maxCount: 1 }, { name: 'shop_image', maxCount: 1 }]), validate(registerSchema), async (req, res) => {
+  const { email, password, firstName, lastName, userType, phone, address, city, state, country, latitude, longitude } = req.body;
+  
+  let profile_image = null;
+  let shop_image = null;
+
+  if (req.files) {
+    if (req.files.profile_image) {
+      profile_image = '/uploads/' + req.files.profile_image[0].filename;
+    }
+    if (req.files.shop_image) {
+      shop_image = '/uploads/' + req.files.shop_image[0].filename;
+    }
+  }
 
   const firebaseAuthEnabled = isFirebaseAuthEnabled();
   let createdFirebaseUid = null;
@@ -97,9 +150,14 @@ router.post('/register', validate(registerSchema), async (req, res) => {
       lastName,
       userType,
       phone,
+      profile_image,
+      address,
+      city,
+      state,
+      country,
     });
 
-    await ensureBarberProfile(userType, user.id, firstName, lastName);
+    await ensureBarberProfile(userType, user.id, firstName, lastName, address, city, state, country, shop_image, latitude, longitude);
 
     const token = createJwtForUser(user.id);
     res.json({ token, user });
@@ -110,6 +168,15 @@ router.post('/register', validate(registerSchema), async (req, res) => {
 
     if (error.code === 'auth/email-already-exists') {
       return res.status(400).json({ error: 'Email already exists' });
+    }
+
+    if (
+      error.code === 'auth/invalid-phone-number' ||
+      String(error.message || '').toUpperCase().includes('TOO_SHORT')
+    ) {
+      return res.status(400).json({
+        error: 'Phone number is too short or invalid. Enter it with its country code, for example +27 71 234 5678.',
+      });
     }
 
     if (error.code === 'firebase/admin-not-configured') {

@@ -122,10 +122,10 @@ export const apiClient = {
     });
   },
 
-  getDispatchBarbers(lat, lng, limit = 5, serviceType = '', customerId = null) {
+  getDispatchBarbers: (lat, lng, limit = 5, serviceType = '', customerId = null) => {
     const encodedService = encodeURIComponent(serviceType || '');
     const customerPart = customerId ? `&customerId=${customerId}` : '';
-    return request(`/barbers/dispatch?lat=${lat}&lng=${lng}&limit=${limit}&serviceType=${encodedService}${customerPart}`);
+    return request(`/barbers/dispatch?lat=${lat}&lng=${lng}&limit=${limit}&radius=50000&serviceType=${encodedService}${customerPart}`);
   },
 
   createBooking(token, payload) {

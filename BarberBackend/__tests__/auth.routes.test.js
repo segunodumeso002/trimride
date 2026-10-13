@@ -31,6 +31,23 @@ describe('Auth routes', () => {
     pool.query.mockReset();
   });
 
+  test('POST /api/auth/register returns a helpful error for a too-short phone number', async () => {
+    const app = createTestApp();
+
+    const res = await request(app).post('/api/auth/register').send({
+      email: 'new@trimride.app',
+      password: 'StrongPass123',
+      firstName: 'New',
+      lastName: 'User',
+      userType: 'customer',
+      phone: '+23355678406',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/valid phone number/i);
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
   test('POST /api/auth/register creates account and returns token + user', async () => {
     const app = createTestApp();
 
@@ -52,7 +69,11 @@ describe('Auth routes', () => {
       firstName: 'New',
       lastName: 'User',
       userType: 'customer',
-      phone: '+27123456789',
+      phone: '+233241234567',
+      address: 'North Ridge',
+      city: 'Accra',
+      state: 'Greater Accra',
+      country: 'Ghana',
     });
 
     expect(res.status).toBe(200);
@@ -71,6 +92,14 @@ describe('Auth routes', () => {
     expect(pool.query.mock.calls[0][0]).toContain('INSERT INTO users');
     expect(pool.query.mock.calls[0][1][0]).toBe('new@trimride.app');
     expect(pool.query.mock.calls[0][1][1]).not.toBe('StrongPass123');
+    expect(pool.query.mock.calls[0][1].slice(5)).toEqual([
+      '+233241234567',
+      null,
+      'North Ridge',
+      'Accra',
+      'Greater Accra',
+      'Ghana',
+    ]);
   });
 
   test('POST /api/auth/register returns 400 for duplicate email', async () => {

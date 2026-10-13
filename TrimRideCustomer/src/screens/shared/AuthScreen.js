@@ -6,16 +6,30 @@ import {
 import { apiClient } from '../../services/apiClient';
 import { useAppMode } from '../../context/AppModeContext';
 import { colors, spacing } from '../../theme/tokens';
+import Icon from 'react-native-vector-icons/Feather';
+import CountryPicker from 'react-native-country-picker-modal';
+import Country from 'country-state-city/lib/cjs/country';
+import parsePhoneNumberFromString from 'libphonenumber-js/max';
+
+const DEFAULT_COUNTRY_CODE = 'ZA';
 
 export default function AuthScreen() {
   const [mode, setMode] = useState('login');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [stateName, setStateName] = useState('');
+  const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY_CODE);
+  const [countryPickerVisible, setCountryPickerVisible] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { establishSession } = useAppMode();
+  const selectedCountry = Country.getCountryByCode(countryCode);
+  const callingCode = selectedCountry?.phonecode || '27';
 
   const submit = async () => {
     if (!email.trim() || !password.trim()) {
@@ -31,22 +45,42 @@ export default function AuthScreen() {
         Alert.alert('Missing fields', 'Phone number is required.');
         return;
       }
+      const parsedPhone = parsePhoneNumberFromString(phone, countryCode);
+      if (!parsedPhone?.isValid()) {
+        Alert.alert(
+          'Invalid phone number',
+          `Enter a valid phone number for ${selectedCountry?.name || 'the selected country'}.`
+        );
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const payload = await apiClient.register({
+          email: email.trim(),
+          password,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phone: parsedPhone.number,
+          address: address.trim() || null,
+          city: city.trim() || null,
+          state: stateName.trim() || null,
+          country: selectedCountry?.name || '',
+          userType: 'customer',
+        });
+
+        await establishSession({ token: payload.token, user: payload.user });
+      } catch (error) {
+        Alert.alert('Error', error.message);
+      } finally {
+        setLoading(false);
+      }
+      return;
     }
 
     setLoading(true);
     try {
-      const payload =
-        mode === 'login'
-          ? await apiClient.login(email.trim(), password)
-          : await apiClient.register({
-              email: email.trim(),
-              password,
-              firstName: firstName.trim(),
-              lastName: lastName.trim(),
-              phone: phone.trim(),
-              userType: 'customer',
-            });
-
+      const payload = await apiClient.login(email.trim(), password);
       await establishSession({ token: payload.token, user: payload.user });
     } catch (error) {
       Alert.alert('Error', error.message);
@@ -94,15 +128,72 @@ export default function AuthScreen() {
               value={lastName}
               onChangeText={setLastName}
             />
-            <Text style={styles.label}>Phone number</Text>
+            <Text style={styles.label}>Address (optional)</Text>
             <TextInput
               style={styles.input}
-              placeholder="+27 71 234 5678"
+              placeholder="Street address"
               placeholderTextColor={colors.steel}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
+              value={address}
+              onChangeText={setAddress}
             />
+            <View style={styles.locationRow}>
+              <View style={styles.locationField}>
+                <Text style={styles.label}>City (optional)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="City"
+                  placeholderTextColor={colors.steel}
+                  value={city}
+                  onChangeText={setCity}
+                />
+              </View>
+              <View style={styles.locationField}>
+                <Text style={styles.label}>State / Province (optional)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="State or province"
+                  placeholderTextColor={colors.steel}
+                  value={stateName}
+                  onChangeText={setStateName}
+                />
+              </View>
+            </View>
+            <Text style={styles.label}>Country</Text>
+            <TouchableOpacity
+              style={styles.countryButton}
+              onPress={() => setCountryPickerVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Select country, currently ${selectedCountry?.name || 'South Africa'}`}
+            >
+              <Text style={styles.countryName}>
+                {selectedCountry?.flag || ''}  {selectedCountry?.name || 'South Africa'}
+              </Text>
+              <Text style={styles.countryDialCode}>+{callingCode}  ›</Text>
+            </TouchableOpacity>
+            <CountryPicker
+              countryCode={countryCode}
+              visible={countryPickerVisible}
+              withFilter
+              withCallingCode
+              withFlagButton={false}
+              onSelect={selected => {
+                setCountryCode(selected.cca2);
+                setCountryPickerVisible(false);
+              }}
+              onClose={() => setCountryPickerVisible(false)}
+            />
+            <Text style={styles.label}>Phone number</Text>
+            <View style={styles.phoneRow}>
+              <Text style={styles.phoneDialCode}>+{callingCode}</Text>
+              <TextInput
+                style={[styles.input, styles.phoneInput]}
+                placeholder="Local phone number"
+                placeholderTextColor={colors.steel}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+              />
+            </View>
           </>
         )}
 
@@ -118,14 +209,23 @@ export default function AuthScreen() {
         />
 
         <Text style={styles.label}>Password</Text>
-        <TextInput
-          style={styles.input}
-          placeholder={mode === 'signup' ? 'Min. 8 characters' : '••••••••'}
-          placeholderTextColor={colors.steel}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={[styles.input, styles.passwordInput]}
+            placeholder={mode === 'signup' ? 'Min. 8 characters' : '••••••••'}
+            placeholderTextColor={colors.steel}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+          />
+          <TouchableOpacity 
+            style={styles.eyeIcon} 
+            onPress={() => setShowPassword(!showPassword)}
+            activeOpacity={0.7}
+          >
+            <Icon name={showPassword ? 'eye' : 'eye-off'} size={20} color={colors.steel} />
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity style={styles.btn} onPress={submit} disabled={loading} activeOpacity={0.85}>
           <Text style={styles.btnText}>
@@ -210,6 +310,49 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 16,
     marginBottom: 4,
+  },
+  locationRow: { flexDirection: 'row', gap: spacing.sm },
+  locationField: { flex: 1 },
+  countryButton: {
+    minHeight: 56,
+    backgroundColor: colors.whisper,
+    borderWidth: 1,
+    borderColor: colors.lightGray,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  countryName: { flex: 1, color: colors.ink, fontSize: 16, fontWeight: '600' },
+  countryDialCode: { color: colors.success, fontSize: 15, fontWeight: '700' },
+  phoneRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  phoneDialCode: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: '700',
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: colors.lightGray,
+    borderRadius: 12,
+    backgroundColor: colors.whisper,
+  },
+  phoneInput: { flex: 1 },
+  passwordContainer: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  passwordInput: {
+    paddingRight: 50,
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 16,
+    height: '100%',
+    justifyContent: 'center',
+    paddingBottom: 4,
   },
   btn: {
     backgroundColor: colors.ink,

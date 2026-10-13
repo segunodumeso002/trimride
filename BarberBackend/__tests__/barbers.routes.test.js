@@ -14,9 +14,12 @@ jest.mock('../middleware/auth', () => (req, _res, next) => {
 const pool = require('../config/database');
 const barbersRouter = require('../routes/barbers');
 
-function createTestApp() {
+function createTestApp(ioMock) {
   const app = express();
   app.use(express.json());
+  if (ioMock) {
+    app.set('io', ioMock);
+  }
   app.use('/api/barbers', barbersRouter);
   return app;
 }
@@ -208,7 +211,37 @@ describe('Barbers routes', () => {
     expect(res.body[0].shop_name).toBe('Inside Radius');
   });
 
-  test('GET /api/barbers/dispatch keeps only service matches when available', async () => {
+  test('GET /api/barbers/dispatch includes online barbers across the global radius', async () => {
+    const app = createTestApp();
+
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 3,
+            user_id: 23,
+            shop_name: 'Distant Online Barber',
+            latitude: 35.6762,
+            longitude: 139.6503,
+            rating: 4.8,
+            queue_count: 0,
+            estimated_wait_time: 0,
+            distance: 12000,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app)
+      .get('/api/barbers/dispatch?lat=-26.2041&lng=28.0473&radius=50000&limit=8&serviceType=fade');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].shop_name).toBe('Distant Online Barber');
+    expect(res.body[0].service_fallback).toBe(true);
+  });
+
+  test('GET /api/barbers/dispatch retains online barbers without matching service records', async () => {
     const app = createTestApp();
 
     pool.query
@@ -249,10 +282,13 @@ describe('Barbers routes', () => {
       .get('/api/barbers/dispatch?lat=-26.2041&lng=28.0473&serviceType=fade');
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(1);
+    expect(res.body).toHaveLength(2);
     expect(res.body[0].id).toBe(1);
     expect(res.body[0].has_service_match).toBe(true);
     expect(res.body[0].service_fallback).toBe(false);
+    expect(res.body[1].id).toBe(2);
+    expect(res.body[1].has_service_match).toBe(false);
+    expect(res.body[1].service_fallback).toBe(true);
   });
 
   test('GET /api/barbers/dispatch marks service_fallback when no service matches exist', async () => {
@@ -402,5 +438,25 @@ describe('Barbers routes', () => {
       'UPDATE barber_profiles SET is_active = $1 WHERE id = $2',
       [false, 7]
     );
+  });
+
+  test('POST /api/barbers/status broadcasts availability changes', async () => {
+    const ioMock = { emit: jest.fn() };
+    const app = createTestApp(ioMock);
+
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: 7, is_active: true, queue_count: 0 }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app)
+      .post('/api/barbers/status')
+      .set('x-user-id', '11')
+      .send({ isOnline: false });
+
+    expect(res.status).toBe(200);
+    expect(ioMock.emit).toHaveBeenCalledWith('barber-availability-updated', {
+      barberId: 7,
+      isOnline: false,
+    });
   });
 });

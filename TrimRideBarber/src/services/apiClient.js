@@ -35,15 +35,16 @@ export function setUnauthorizedHandler(fn) {
 
 async function request(endpoint, options = {}) {
   // Always set Accept and Content-Type for Android fetch compatibility
+  const isFormData = options.body instanceof FormData;
+  
   const mergedHeaders = {
     Accept: 'application/json',
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers || {}),
   };
 
-  // If body is an object, sanitize and stringify
   let body = options.body;
-  if (body && typeof body === 'object') {
+  if (!isFormData && body && typeof body === 'object') {
     // Remove undefined/null fields
     const sanitized = Object.fromEntries(Object.entries(body).filter(([_, v]) => v !== undefined));
     body = JSON.stringify(sanitized);
@@ -111,7 +112,7 @@ export const apiClient = {
   register(payload) {
     return request('/auth/register', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: payload,
     });
   },
 
@@ -178,6 +179,14 @@ export const apiClient = {
       method: 'POST',
       headers: authHeader(token),
       body: JSON.stringify({ isOnline }),
+    });
+  },
+
+  updateBarberQueue(token, action) {
+    return request('/barbers/queue', {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify({ action }),
     });
   },
 

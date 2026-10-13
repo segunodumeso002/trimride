@@ -89,15 +89,21 @@ export default function CustomerHomeScreen({ navigation }) {
         );
       }
 
-      const normalized = data.map(item => ({
-        id: String(item.id),
-        barberId: Number(item.id),
-        name: item.shop_name,
-        eta: `${Math.max(3, Math.round((item.distance || 1.2) * 2))} min`,
-        rating: Number(item.rating || 0).toFixed(1),
-        queue: item.queue_count || 0,
-        serviceType: selectedService,
-      }));
+      const normalized = data.map(item => {
+        const distanceKm = Number(item.distance);
+        return {
+          id: String(item.id),
+          barberId: Number(item.id),
+          name: item.shop_name,
+          distanceKm: Number.isFinite(distanceKm) ? distanceKm : null,
+          latitude: Number(item.latitude),
+          longitude: Number(item.longitude),
+          hasServiceMatch: item.has_service_match !== false,
+          rating: Number(item.rating || 0).toFixed(1),
+          queue: item.queue_count || 0,
+          serviceType: selectedService,
+        };
+      });
 
       setBarbers(normalized);
       setLastUpdated(new Date());
@@ -156,16 +162,29 @@ export default function CustomerHomeScreen({ navigation }) {
     };
     const onConnect = () => {
       loadCustomerBookings();
+      loadDispatch(true);
     };
+    const onAvailabilityUpdated = () => loadDispatch(true);
     socket.on('booking-status-updated', onStatusUpdate);
+    socket.on('barber-availability-updated', onAvailabilityUpdated);
+    
+    const onQueueUpdated = ({ barberId, queue_count }) => {
+      setBarbers(prev => prev.map(b => 
+        b.barberId === barberId ? { ...b, queue: queue_count } : b
+      ));
+    };
+    socket.on('queue-updated', onQueueUpdated);
+
     socket.on('connect', onConnect);
     socket.on('reconnect', onConnect);
     return () => {
       socket.off('booking-status-updated', onStatusUpdate);
+      socket.off('barber-availability-updated', onAvailabilityUpdated);
+      socket.off('queue-updated', onQueueUpdated);
       socket.off('connect', onConnect);
       socket.off('reconnect', onConnect);
     };
-  }, [token, loadCustomerBookings]);
+  }, [token, loadCustomerBookings, loadDispatch]);
 
   // Fallback polling so status still updates if a socket event is missed.
   useEffect(() => {
@@ -271,8 +290,8 @@ export default function CustomerHomeScreen({ navigation }) {
 
       {!activeBooking ? (
         <View style={styles.guidanceCard}>
-          <Text style={styles.guidanceTitle}>Start with the best match near you</Text>
-          <Text style={styles.guidanceText}>Choose a service, review the closest barber options, and request in a few taps.</Text>
+          <Text style={styles.guidanceTitle}>Start with the best available match</Text>
+          <Text style={styles.guidanceText}>Choose a service, compare online barbers by distance, and request in a few taps.</Text>
         </View>
       ) : null}
 
@@ -332,7 +351,7 @@ export default function CustomerHomeScreen({ navigation }) {
 
       {featuredBarber ? (
         <>
-          <Text style={styles.sectionLabel}>Best match nearby</Text>
+            <Text style={styles.sectionLabel}>Best available match</Text>
           <TouchableOpacity
             style={styles.featuredCard}
             onPress={() => navigation.navigate('RequestBarber', { barber: featuredBarber, serviceType: selectedService })}
@@ -340,10 +359,14 @@ export default function CustomerHomeScreen({ navigation }) {
             <View style={styles.featuredHeader}>
               <View style={styles.featuredCopy}>
                 <Text style={styles.featuredTitle}>{featuredBarber.name}</Text>
-                <Text style={styles.featuredSubtitle}>Strong availability for {selectedService}</Text>
+                <Text style={styles.featuredSubtitle}>
+                  {featuredBarber.hasServiceMatch ? `Available for ${selectedService}` : 'Online; requested service not listed'}
+                </Text>
               </View>
               <View style={styles.featuredBadge}>
-                <Text style={styles.featuredBadgeText}>{featuredBarber.eta}</Text>
+                <Text style={styles.featuredBadgeText}>
+                  {Number.isFinite(featuredBarber.distanceKm) ? `${featuredBarber.distanceKm.toFixed(1)} km away` : 'Distance unavailable'}
+                </Text>
               </View>
             </View>
             <View style={styles.metricRow}>
@@ -384,8 +407,8 @@ export default function CustomerHomeScreen({ navigation }) {
           <Marker
             key={barber.id}
             coordinate={{
-              latitude: barber.latitude || DEFAULT_COORDS.latitude + (Math.random() - 0.5) * 0.02,
-              longitude: barber.longitude || DEFAULT_COORDS.longitude + (Math.random() - 0.5) * 0.02,
+              latitude: Number.isFinite(barber.latitude) ? barber.latitude : DEFAULT_COORDS.latitude,
+              longitude: Number.isFinite(barber.longitude) ? barber.longitude : DEFAULT_COORDS.longitude,
             }}
             title={barber.name}
             description={barber.eta}
@@ -397,14 +420,14 @@ export default function CustomerHomeScreen({ navigation }) {
         ))}
       </MapView>
 
-      <UberBottomSheet>
+      <UberBottomSheet initialSnapIndex={2}>
         <FlatList
           data={remainingBarbers}
           refreshing={refreshing}
           onRefresh={() => loadDispatch(true)}
           keyExtractor={item => item.id}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 50, paddingHorizontal: spacing.lg }}
+          contentContainerStyle={{ paddingBottom: 90, paddingHorizontal: spacing.lg }}
           ListHeaderComponent={renderHeader}
           renderItem={({ item }) => (
             <TouchableOpacity
@@ -412,10 +435,16 @@ export default function CustomerHomeScreen({ navigation }) {
               onPress={() => navigation.navigate('RequestBarber', { barber: item, serviceType: selectedService })}
             >
               <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>{item.name}</Text>
-                <Text style={styles.cardEta}>{item.eta}</Text>
+                <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
+                <View style={styles.cardEtaBadge}>
+                  <Text style={styles.cardEta}>
+                    {Number.isFinite(item.distanceKm) ? `${item.distanceKm.toFixed(1)} km away` : 'Distance unavailable'}
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.cardSubcopy}>Ready for {selectedService} appointments</Text>
+              <Text style={styles.cardSubcopy}>
+                {item.hasServiceMatch ? `Available for ${selectedService}` : 'Online; requested service not listed'}
+              </Text>
               <View style={styles.cardMetaRow}>
                 <Text style={[styles.cardMetaPill, styles.ratingPill]}>★ {item.rating}</Text>
                 <Text style={styles.cardMetaPill}>{item.queue} in queue</Text>
@@ -425,8 +454,8 @@ export default function CustomerHomeScreen({ navigation }) {
           )}
           ListEmptyComponent={!loading && !featuredBarber ? (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No nearby barbers for {selectedService} right now</Text>
-              <Text style={styles.emptyBody}>Try refreshing, switching the service filter, or checking again in a few minutes.</Text>
+              <Text style={styles.emptyTitle}>No online barbers found for {selectedService}</Text>
+              <Text style={styles.emptyBody}>Try refreshing or switching the service filter.</Text>
               <TouchableOpacity style={styles.retryButton} onPress={() => loadDispatch(true)}>
                 <Text style={styles.retryButtonText}>Try Again</Text>
               </TouchableOpacity>
@@ -752,6 +781,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: spacing.md,
     marginBottom: spacing.sm,
+    overflow: 'hidden',
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -764,24 +794,29 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.sm,
   },
   cardTitle: { 
-    fontSize: 19, 
+    flex: 1,
+    fontSize: 18, 
     fontWeight: '900', 
     color: colors.charcoal,
     letterSpacing: -0.3,
+    marginRight: spacing.xs,
+  },
+  cardEtaBadge: {
+    flexShrink: 0,
+    backgroundColor: colors.paper,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
   },
   cardEta: {
     color: colors.charcoal,
     fontWeight: '800',
-    fontSize: 13,
-    backgroundColor: colors.paper,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    overflow: 'hidden',
+    fontSize: 12,
   },
   cardSubcopy: {
     marginTop: spacing.xs,
@@ -789,6 +824,7 @@ const styles = StyleSheet.create({
   },
   cardMetaRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     marginTop: spacing.sm,
   },

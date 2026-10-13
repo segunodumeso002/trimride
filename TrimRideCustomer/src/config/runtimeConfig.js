@@ -1,9 +1,9 @@
 import { Platform } from 'react-native';
 
 const DEV_SOCKET_BASE_BY_PLATFORM = {
-  android: 'http://barber-env.eba-ms3zgfkh.us-east-2.elasticbeanstalk.com',
-  ios: 'http://barber-env.eba-ms3zgfkh.us-east-2.elasticbeanstalk.com',
-  default: 'http://barber-env.eba-ms3zgfkh.us-east-2.elasticbeanstalk.com',
+  android: 'http://10.0.2.2:3001',
+  ios: 'http://localhost:3001',
+  default: 'http://10.0.2.2:3001',
 };
 
 const ENV_PRESETS = {
@@ -15,7 +15,7 @@ const ENV_PRESETS = {
     socketBaseUrl: 'https://staging-api.trimride.app',
   },
   production: {
-    socketBaseUrl: 'https://api.trimride.app',
+    socketBaseUrl: 'http://barber-env.eba-ms3zgfkh.us-east-2.elasticbeanstalk.com',
   },
 };
 

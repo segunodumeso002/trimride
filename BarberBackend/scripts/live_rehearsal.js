@@ -161,7 +161,7 @@ async function run() {
       firstName: 'Rehearsal',
       lastName: 'Customer',
       userType: 'customer',
-      phone: '+27100000000',
+      phone: `+2710${Math.floor(1000000 + Math.random() * 9000000)}`,
     }),
   });
 

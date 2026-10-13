@@ -5,7 +5,10 @@ const requireAuth = require('../middleware/auth');
 const { validate, Joi } = require('../middleware/validate');
 
 function normalizedEnvEmail(key) {
-  if (process.env.NODE_ENV === 'test') {
+  if (
+    process.env.NODE_ENV === 'test' ||
+    String(process.env.DEMO_MODE || '').toLowerCase() !== 'true'
+  ) {
     return '';
   }
   return String(process.env[key] || '').trim().toLowerCase();
@@ -22,12 +25,12 @@ const serviceBodySchema = Joi.object({
 const coordQuerySchema = Joi.object({
   lat:    Joi.number().min(-90).max(90).required(),
   lng:    Joi.number().min(-180).max(180).required(),
-  radius: Joi.number().positive().max(100).default(5),
+  radius: Joi.number().positive().max(100000).default(5),
 }).unknown(true); // allow extra query params like limit / serviceType
 
 async function ensureBarberProfile(userId) {
   const barberResult = await pool.query(
-    'SELECT id, is_active FROM barber_profiles WHERE user_id = $1 LIMIT 1',
+    'SELECT id, is_active, queue_count FROM barber_profiles WHERE user_id = $1 LIMIT 1',
     [userId]
   );
 
@@ -50,7 +53,7 @@ async function ensureBarberProfile(userId) {
        user_id, shop_name, shop_address, latitude, longitude, description,
        is_active, rating, queue_count, estimated_wait_time
      ) VALUES ($1, $2, $3, $4, $5, $6, false, 0.00, 0, 0)
-     RETURNING id, is_active`,
+     RETURNING id, is_active, queue_count`,
     [
       userId,
       `${user.first_name} ${user.last_name} Barber`,
@@ -216,7 +219,7 @@ router.get('/dispatch', validate(coordQuerySchema, 'query'), async (req, res) =>
       FROM barber_profiles bp
       JOIN users u ON u.id = bp.user_id
       WHERE bp.is_active = true
-        AND ($3 = '' OR LOWER(u.email) = $3)
+        AND ($3 = '' OR LOWER(u.email) = ANY(string_to_array($3, ',')))
       `,
       [lat, lng, demoLockedBarberEmail]
     );
@@ -310,7 +313,7 @@ router.get('/dispatch', validate(coordQuerySchema, 'query'), async (req, res) =>
         return {
           ...row,
           has_service_match: hasServiceMatch,
-          service_fallback: false,
+          service_fallback: Boolean(normalizedServiceType && !hasServiceMatch),
           hotspot_boosted: inHotspot,
           repeat_affinity_count: repeatCount,
           peak_hour_adjusted: isPeakHour,
@@ -320,21 +323,7 @@ router.get('/dispatch', validate(coordQuerySchema, 'query'), async (req, res) =>
       .filter(row => row.distance <= Number(radius))
       .sort((a, b) => a.dispatch_score - b.dispatch_score);
 
-    let dispatchResults = ranked;
-
-    if (normalizedServiceType) {
-      const matchedResults = ranked.filter(row => row.has_service_match);
-      if (matchedResults.length > 0) {
-        dispatchResults = matchedResults;
-      } else {
-        dispatchResults = ranked.map(row => ({
-          ...row,
-          service_fallback: true,
-        }));
-      }
-    }
-
-    return res.json(dispatchResults.slice(0, Number(limit)));
+    return res.json(ranked.slice(0, Number(limit)));
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -359,6 +348,14 @@ router.post('/status', requireAuth, async (req, res) => {
       [isOnline, barberProfile.id]
     );
 
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('barber-availability-updated', {
+        barberId: barberProfile.id,
+        isOnline,
+      });
+    }
+
     return res.json({ ok: true, isOnline });
   } catch (error) {
     return res.status(500).json({ error: error.message });
@@ -373,7 +370,38 @@ router.get('/status', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Barber profile not found' });
     }
 
-    return res.json({ ok: true, isOnline: !!barberProfile.is_active });
+    return res.json({ ok: true, isOnline: !!barberProfile.is_active, queue_count: barberProfile.queue_count || 0 });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Update barber queue count manually
+router.post('/queue', requireAuth, async (req, res) => {
+  const { action } = req.body; // 'increment' or 'decrement'
+
+  try {
+    const barberProfile = await ensureBarberProfile(req.userId);
+    if (!barberProfile) {
+      return res.status(403).json({ error: 'Barber profile not found' });
+    }
+
+    const currentCount = barberProfile.queue_count || 0;
+    let newCount = currentCount;
+    if (action === 'increment') newCount++;
+    if (action === 'decrement' && newCount > 0) newCount--;
+
+    await pool.query(
+      'UPDATE barber_profiles SET queue_count = $1 WHERE id = $2',
+      [newCount, barberProfile.id]
+    );
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('queue-updated', { barberId: barberProfile.id, queue_count: newCount });
+    }
+
+    return res.json({ ok: true, queue_count: newCount });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
