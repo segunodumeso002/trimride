@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Vibration } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Vibration, Alert, Platform, PermissionsAndroid, Linking } from 'react-native';
+import MapView, { Marker, Polyline } from 'react-native-maps';
+import Geolocation from 'react-native-geolocation-service';
 import { colors, spacing } from '../../theme/tokens';
 import { connectSocket } from '../../services/socketClient';
 import { useAppMode } from '../../context/AppModeContext';
@@ -11,9 +12,53 @@ export default function TrackBarberScreen({ route, navigation }) {
   const { barber, service, bookingId, queuePosition, clientsAhead, initialStatus } = route?.params || {};
   const [eta, setEta] = useState(7);
   const [status, setStatus] = useState(initialStatus || 'pending');
-  const [barberMarker, setBarberMarker] = useState({ latitude: -26.2041, longitude: 28.0473 });
+
+  const initialBarberCoord = useMemo(() => {
+    const lat = Number(barber?.latitude);
+    const lng = Number(barber?.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
+      return { latitude: lat, longitude: lng };
+    }
+    return { latitude: -26.2041, longitude: 28.0473 };
+  }, [barber?.latitude, barber?.longitude]);
+
+  const [barberMarker, setBarberMarker] = useState(initialBarberCoord);
+  const [customerLocation, setCustomerLocation] = useState(null);
+  const [mapReady, setMapReady] = useState(false);
+  const mapRef = useRef(null);
+  const [cancelling, setCancelling] = useState(false);
   const { token } = useAppMode();
   const missingBookingContext = !barber || !barber.name || !bookingId;
+
+  const handleCancelBooking = () => {
+    Alert.alert(
+      'Cancel Booking Request',
+      'Are you sure you want to cancel this booking? This will remove your spot in the queue.',
+      [
+        { text: 'Keep Booking', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setCancelling(true);
+              try {
+                ReactNativeHapticFeedback.trigger('notificationWarning', { enableVibrateFallback: true });
+              } catch (e) {}
+
+              await apiClient.cancelBooking(token, bookingId);
+              setStatus('cancelled');
+              Alert.alert('Booking Cancelled', 'Your booking request has been cancelled.');
+            } catch (err) {
+              Alert.alert('Error', err?.message || 'Could not cancel booking. Please try again.');
+            } finally {
+              setCancelling(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const getStatusCopy = () => {
     if (status === 'confirmed') {
@@ -99,6 +144,137 @@ export default function TrackBarberScreen({ route, navigation }) {
     }
   }, [status]);
 
+  // Fetch & watch Customer's live GPS location
+  useEffect(() => {
+    let watchId = null;
+    let isMounted = true;
+
+    const requestAndFetchLocation = async () => {
+      const applyFallback = () => {
+        if (!isMounted) return;
+        setCustomerLocation({
+          latitude: barberMarker.latitude - 0.006,
+          longitude: barberMarker.longitude - 0.005,
+        });
+      };
+
+      const startTracking = () => {
+        Geolocation.getCurrentPosition(
+          pos => {
+            if (!isMounted) return;
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const isIdentical =
+              Math.abs(lat - barberMarker.latitude) < 0.0008 &&
+              Math.abs(lng - barberMarker.longitude) < 0.0008;
+
+            if (isIdentical) {
+              setCustomerLocation({
+                latitude: barberMarker.latitude - 0.006,
+                longitude: barberMarker.longitude - 0.005,
+              });
+            } else {
+              setCustomerLocation({ latitude: lat, longitude: lng });
+            }
+          },
+          () => applyFallback(),
+          { enableHighAccuracy: false, timeout: 8000, maximumAge: 30000 }
+        );
+
+        try {
+          watchId = Geolocation.watchPosition(
+            pos => {
+              if (!isMounted) return;
+              setCustomerLocation({
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+              });
+            },
+            () => {},
+            { enableHighAccuracy: false, distanceFilter: 15 }
+          );
+        } catch (e) {}
+      };
+
+      if (Platform.OS === 'android') {
+        try {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+            {
+              title: 'Location Permission',
+              message: 'TrimRide needs your location to display your route to the barber shop.',
+              buttonPositive: 'Allow',
+              buttonNegative: 'Deny',
+            }
+          );
+          if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+            startTracking();
+          } else {
+            applyFallback();
+          }
+        } catch (e) {
+          applyFallback();
+        }
+      } else {
+        startTracking();
+      }
+    };
+
+    requestAndFetchLocation();
+
+    return () => {
+      isMounted = false;
+      if (watchId !== null) {
+        try { Geolocation.clearWatch(watchId); } catch (e) {}
+      }
+    };
+  }, [barberMarker.latitude, barberMarker.longitude]);
+
+  // Auto-fit map camera so both customer and barber shop pins are framed
+  const fitMapMarkers = useCallback(() => {
+    if (mapRef.current && customerLocation && barberMarker) {
+      try {
+        mapRef.current.fitToCoordinates(
+          [
+            { latitude: customerLocation.latitude, longitude: customerLocation.longitude },
+            { latitude: barberMarker.latitude, longitude: barberMarker.longitude },
+          ],
+          {
+            edgePadding: { top: 45, right: 45, bottom: 45, left: 45 },
+            animated: true,
+          }
+        );
+      } catch (e) {}
+    }
+  }, [customerLocation, barberMarker]);
+
+  useEffect(() => {
+    if (mapReady) {
+      fitMapMarkers();
+    }
+  }, [mapReady, fitMapMarkers]);
+
+  const mapRegion = useMemo(() => {
+    if (!customerLocation) {
+      return {
+        latitude: barberMarker.latitude,
+        longitude: barberMarker.longitude,
+        latitudeDelta: 0.025,
+        longitudeDelta: 0.025,
+      };
+    }
+    const midLat = (customerLocation.latitude + barberMarker.latitude) / 2;
+    const midLng = (customerLocation.longitude + barberMarker.longitude) / 2;
+    const latDelta = Math.max(Math.abs(customerLocation.latitude - barberMarker.latitude) * 1.8, 0.015);
+    const lngDelta = Math.max(Math.abs(customerLocation.longitude - barberMarker.longitude) * 1.8, 0.015);
+    return {
+      latitude: midLat,
+      longitude: midLng,
+      latitudeDelta: latDelta,
+      longitudeDelta: lngDelta,
+    };
+  }, [customerLocation, barberMarker]);
+
   useEffect(() => {
     if (!token || !bookingId || missingBookingContext) {
       return undefined;
@@ -110,8 +286,15 @@ export default function TrackBarberScreen({ route, navigation }) {
     const refreshLatestStatus = () => {
       apiClient.getMyActiveBooking(token)
         .then(booking => {
-          if (booking && Number(booking.id) === Number(bookingId) && booking.status) {
-            setStatus(booking.status);
+          if (booking && Number(booking.id) === Number(bookingId)) {
+            if (booking.status) {
+              setStatus(booking.status);
+            }
+            const bLat = Number(booking.latitude);
+            const bLng = Number(booking.longitude);
+            if (Number.isFinite(bLat) && Number.isFinite(bLng) && bLat !== 0 && bLng !== 0) {
+              setBarberMarker({ latitude: bLat, longitude: bLng });
+            }
           }
         })
         .catch(() => {});
@@ -125,7 +308,11 @@ export default function TrackBarberScreen({ route, navigation }) {
 
     const onLocation = data => {
       if (Number(data.bookingId) === Number(bookingId)) {
-        setBarberMarker({ latitude: data.latitude, longitude: data.longitude });
+        const lat = Number(data.latitude);
+        const lng = Number(data.longitude);
+        if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
+          setBarberMarker({ latitude: lat, longitude: lng });
+        }
       }
     };
 
@@ -200,30 +387,91 @@ export default function TrackBarberScreen({ route, navigation }) {
 
         <View style={styles.mapContainer}>
           <MapView
+            ref={mapRef}
             style={styles.map}
-            initialRegion={{
-              latitude: barberMarker.latitude,
-              longitude: barberMarker.longitude,
-              latitudeDelta: 0.05,
-              longitudeDelta: 0.05,
+            initialRegion={mapRegion}
+            region={mapRegion}
+            onMapReady={() => {
+              setMapReady(true);
+              fitMapMarkers();
             }}
-            region={{
-              latitude: barberMarker.latitude,
-              longitude: barberMarker.longitude,
-              latitudeDelta: 0.05,
-              longitudeDelta: 0.05,
-            }}
+            showsUserLocation={false}
+            showsCompass={true}
           >
+            {/* Customer's current location pin */}
+            {customerLocation && (
+              <Marker
+                coordinate={{
+                  latitude: customerLocation.latitude,
+                  longitude: customerLocation.longitude,
+                }}
+                title="Your Location"
+                description="Current Location"
+                pinColor="#2563EB"
+              />
+            )}
+
+            {/* Barber Shop pinned location */}
             <Marker
               coordinate={{
                 latitude: barberMarker.latitude,
                 longitude: barberMarker.longitude,
               }}
               title={`${barber.name}'s Shop`}
-              description={service}
+              description={`Service: ${service || 'Grooming'}`}
+              pinColor="#EA580C"
             />
+
+            {/* Uber-style Polyline connecting customer to barber shop */}
+            {customerLocation && (
+              <Polyline
+                coordinates={[customerLocation, barberMarker]}
+                strokeColor="#3B82F6"
+                strokeWidth={3}
+                lineDashPattern={[6, 4]}
+              />
+            )}
           </MapView>
+
+          {/* Map legend overlay */}
+          <View style={styles.mapLegendOverlay}>
+            <View style={styles.legendBadge}>
+              <View style={[styles.legendDot, { backgroundColor: '#2563EB' }]} />
+              <Text style={styles.legendText}>You</Text>
+            </View>
+            <Text style={styles.legendSeparator}>➔</Text>
+            <View style={styles.legendBadge}>
+              <View style={[styles.legendDot, { backgroundColor: '#EA580C' }]} />
+              <Text style={styles.legendText}>{barber.name}'s Shop</Text>
+            </View>
+          </View>
         </View>
+
+        {/* Turn-by-Turn Directions Button */}
+        <TouchableOpacity
+          style={styles.directionsButton}
+          onPress={() => {
+            try { ReactNativeHapticFeedback.trigger('impactLight', { enableVibrateFallback: true }); } catch (e) {}
+            const lat = barberMarker.latitude;
+            const lng = barberMarker.longitude;
+            const label = encodeURIComponent(`${barber.name}'s Shop`);
+            const url = Platform.select({
+              ios: `maps:0,0?q=${label}@${lat},${lng}`,
+              android: `geo:0,0?q=${lat},${lng}(${label})`,
+            }) || `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+            Linking.canOpenURL(url).then(supported => {
+              if (supported) {
+                Linking.openURL(url);
+              } else {
+                Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`);
+              }
+            }).catch(() => {
+              Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`);
+            });
+          }}
+        >
+          <Text style={styles.directionsButtonText}>🧭 Open in Google Maps for Directions</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.chatButton}
@@ -240,13 +488,14 @@ export default function TrackBarberScreen({ route, navigation }) {
           <Text style={styles.chatButtonText}>💬 Live Chat & En-Route Contact</Text>
         </TouchableOpacity>
 
-        {(status === 'confirmed' || status === 'completed' || status === 'pending') && (
+        {(status === 'confirmed' || status === 'completed') && (
           <TouchableOpacity
             style={styles.paymentButton}
             onPress={() => {
               try { ReactNativeHapticFeedback.trigger('impactMedium', { enableVibrateFallback: true }); } catch (e) {}
               navigation.navigate('PaymentCheckout', {
                 bookingId: bookingId,
+                barberId: barber.barberId || barber.id || 1,
                 barberName: barber.name,
                 service: service,
                 baseAmount: 25.00,
@@ -254,6 +503,27 @@ export default function TrackBarberScreen({ route, navigation }) {
             }}
           >
             <Text style={styles.paymentButtonText}>💳 Proceed to Payment & Tipping</Text>
+          </TouchableOpacity>
+        )}
+
+        {(status === 'pending' || status === 'confirmed') && (
+          <TouchableOpacity
+            style={[styles.cancelButton, cancelling && styles.buttonDisabled]}
+            disabled={cancelling}
+            onPress={handleCancelBooking}
+          >
+            <Text style={styles.cancelButtonText}>
+              {cancelling ? 'Cancelling...' : status === 'pending' ? '✕ Cancel Booking Request' : '✕ Cancel Booking'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {status === 'cancelled' && (
+          <TouchableOpacity
+            style={styles.findAnotherButton}
+            onPress={() => navigation.navigate('CustomerHome')}
+          >
+            <Text style={styles.findAnotherButtonText}>🔍 Find Another Barber</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -363,13 +633,65 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     borderRadius: 16,
     overflow: 'hidden',
-    height: 200,
+    height: 220,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
   map: {
     width: '100%',
     height: '100%',
+  },
+  mapLegendOverlay: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    borderRadius: 20,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  legendBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  legendSeparator: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  directionsButton: {
+    marginTop: spacing.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  directionsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   chatButton: {
     marginTop: spacing.md,
@@ -408,6 +730,42 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  cancelButton: {
+    marginTop: spacing.md,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: '#DC2626',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  findAnotherButton: {
+    marginTop: spacing.md,
+    backgroundColor: colors.ink,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  findAnotherButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   panel: {
     backgroundColor: colors.white,

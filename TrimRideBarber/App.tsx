@@ -56,21 +56,26 @@ function MainNavigator() {
 
 function App() {
   return (
-    <ErrorBoundary>
-      {/* TrimRide Barber Application Root */}
-      <NotificationProvider>
-        <AppModeProvider defaultRole="barber">
-          <NavigationContainer>
-            <MainNavigator />
-            <NotificationBanner />
-          </NavigationContainer>
-        </AppModeProvider>
-      </NotificationProvider>
-    </ErrorBoundary>
+    <GestureHandlerRootView style={styles.root}>
+      <ErrorBoundary>
+        {/* TrimRide Barber Application Root */}
+        <NotificationProvider>
+          <AppModeProvider defaultRole="barber">
+            <NavigationContainer>
+              <MainNavigator />
+              <NotificationBanner />
+            </NavigationContainer>
+          </AppModeProvider>
+        </NotificationProvider>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

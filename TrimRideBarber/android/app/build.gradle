@@ -118,10 +118,23 @@ android {
     }
 }
 
+// Force play-services-location:18.0.0 across ALL transitive deps.
+// Firebase BOM 33.x pulls a newer version where FusedLocationProviderClient
+// changed from abstract class → interface, causing IncompatibleClassChangeError
+// in RNFusedLocation at runtime.
+configurations.all {
+    resolutionStrategy {
+        force 'com.google.android.gms:play-services-location:18.0.0'
+    }
+}
+
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
     implementation platform('com.google.firebase:firebase-bom:33.12.0')
+
+    // Anchor the forced version explicitly
+    implementation("com.google.android.gms:play-services-location:18.0.0")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

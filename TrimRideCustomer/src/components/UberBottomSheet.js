@@ -1,29 +1,44 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
   Animated,
   PanResponder,
-  Dimensions,
-  TouchableWithoutFeedback,
-  Keyboard,
+  useWindowDimensions,
 } from 'react-native';
-import { colors, spacing } from '../theme/tokens';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-// Adjustable settings
-const MIN_HEIGHT = 100;
-const MAX_HEIGHT = SCREEN_HEIGHT * 0.92;
+import { spacing } from '../theme/tokens';
 
 export default function UberBottomSheet({ 
   children, 
-  snapPoints = [MIN_HEIGHT, SCREEN_HEIGHT * 0.4, MAX_HEIGHT],
+  snapPoints: propSnapPoints,
   initialSnapIndex = 2
 }) {
+  const { height: screenHeight } = useWindowDimensions();
+
+  const snapPoints = useMemo(() => {
+    const minHeight = 100;
+    const maxHeight = Math.round(screenHeight * 0.92);
+    return propSnapPoints || [minHeight, Math.round(screenHeight * 0.4), maxHeight];
+  }, [propSnapPoints, screenHeight]);
+
   const maxSnap = snapPoints[snapPoints.length - 1];
   const initialOffset = Math.max(0, maxSnap - (snapPoints[initialSnapIndex] ?? maxSnap));
   const translateY = useRef(new Animated.Value(initialOffset)).current;
+
+  const snapPointsRef = useRef(snapPoints);
+  snapPointsRef.current = snapPoints;
+  const maxSnapRef = useRef(maxSnap);
+  maxSnapRef.current = maxSnap;
+
+  useEffect(() => {
+    const targetOffset = Math.max(0, maxSnap - (snapPoints[initialSnapIndex] ?? maxSnap));
+    Animated.spring(translateY, {
+      toValue: targetOffset,
+      useNativeDriver: false,
+      bounciness: 0,
+      speed: 12,
+    }).start();
+  }, [screenHeight, maxSnap, initialSnapIndex, snapPoints, translateY]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -41,26 +56,28 @@ export default function UberBottomSheet({
       onPanResponderRelease: (_, gestureState) => {
         translateY.flattenOffset();
         
+        const currentMaxSnap = maxSnapRef.current;
+        const currentPoints = snapPointsRef.current;
         const currentOffset = translateY._value;
-        const currentHeight = maxSnap - currentOffset;
+        const currentHeight = currentMaxSnap - currentOffset;
         
         // Find nearest snap point based on velocity and current position
-        let targetHeight = snapPoints[0];
+        let targetHeight = currentPoints[0];
         
         if (gestureState.vy < -0.5) {
           // Fast swipe up
-          targetHeight = maxSnap;
+          targetHeight = currentMaxSnap;
         } else if (gestureState.vy > 0.5) {
           // Fast swipe down
-          targetHeight = snapPoints[0];
+          targetHeight = currentPoints[0];
         } else {
           // Snap to closest point
-          targetHeight = snapPoints.reduce((prev, curr) => 
+          targetHeight = currentPoints.reduce((prev, curr) => 
             Math.abs(curr - currentHeight) < Math.abs(prev - currentHeight) ? curr : prev
           );
         }
 
-        const targetOffset = Math.max(0, maxSnap - targetHeight);
+        const targetOffset = Math.max(0, currentMaxSnap - targetHeight);
 
         Animated.spring(translateY, {
           toValue: targetOffset,

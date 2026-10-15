@@ -179,4 +179,95 @@ describe('Bookings routes', () => {
       expect.objectContaining({ bookingId: 9, latitude: -26.2, longitude: 28.0 })
     );
   });
+
+  test('POST /api/bookings/:bookingId/complete completes session and emits socket updates', async () => {
+    const app = createTestApp(ioMock);
+
+    // 1: resolveBarberProfileId
+    // 2: bookingResult (customer_id: 33, barber_id: 7)
+    // 3: update status to completed
+    // 4: update queue_position
+    // 5: update barber_profiles queue_count
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: 7 }] })
+      .mockResolvedValueOnce({
+        rows: [{ id: 12, customer_id: 33, barber_id: 7, status: 'confirmed' }],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app)
+      .post('/api/bookings/12/complete')
+      .set('x-user-id', '10');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ success: true, bookingId: 12, status: 'completed' });
+
+    expect(ioMock.to).toHaveBeenCalledWith('booking-12');
+    expect(ioMock.to).toHaveBeenCalledWith('user-33');
+    expect(emitMock).toHaveBeenCalledWith(
+      'booking-status-updated',
+      expect.objectContaining({ bookingId: 12, status: 'completed', byBarber: true })
+    );
+  });
+
+  test('GET /api/bookings/my-active returns active confirmed booking for barber', async () => {
+    const app = createTestApp(ioMock);
+
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: 7 }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 15,
+            status: 'confirmed',
+            first_name: 'John',
+            last_name: 'Doe',
+            service_name: 'Skin Fade',
+          },
+        ],
+      });
+
+    const res = await request(app)
+      .get('/api/bookings/my-active')
+      .set('x-user-id', '10');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(
+      expect.objectContaining({ id: 15, status: 'confirmed', first_name: 'John' })
+    );
+  });
+
+  test('POST /api/bookings/:bookingId/cancel cancels booking when called by customer', async () => {
+    const app = createTestApp(ioMock);
+
+    // 1: booking lookup
+    // 2: update status to cancelled
+    // 3: update barber queue_count
+    // 4: update remaining pending queue positions
+    pool.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 40, customer_id: 10, barber_id: 5, status: 'pending', queue_position: 1, barber_user_id: 99 }],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app)
+      .post('/api/bookings/40/cancel')
+      .set('x-user-id', '10')
+      .send({ reason: 'Need to reschedule' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ success: true, bookingId: 40, status: 'cancelled' });
+
+    expect(ioMock.to).toHaveBeenCalledWith('booking-40');
+    expect(ioMock.to).toHaveBeenCalledWith('user-10');
+    expect(ioMock.to).toHaveBeenCalledWith('user-99');
+    expect(emitMock).toHaveBeenCalledWith(
+      'booking-status-updated',
+      expect.objectContaining({ bookingId: 40, status: 'cancelled', byCustomer: true })
+    );
+  });
 });

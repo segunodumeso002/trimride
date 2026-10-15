@@ -166,4 +166,89 @@ router.get('/my-bookings', requireAuth, async (req, res) => {
   }
 });
 
+// Cancel an existing booking by customer
+router.post('/cancel-booking', requireAuth, async (req, res) => {
+  const { bookingId, booking_id, id, reason } = req.body;
+  const targetBookingId = bookingId || booking_id || id;
+
+  if (!targetBookingId) {
+    return res.status(400).json({ error: 'bookingId is required' });
+  }
+
+  try {
+    const bookingResult = await pool.query(
+      `SELECT b.id, b.customer_id, b.barber_id, b.status, b.queue_position, bp.user_id AS barber_user_id
+       FROM bookings b
+       JOIN barber_profiles bp ON b.barber_id = bp.id
+       WHERE b.id = $1`,
+      [targetBookingId]
+    );
+
+    if (bookingResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const booking = bookingResult.rows[0];
+
+    if (booking.customer_id !== req.userId) {
+      return res.status(403).json({ error: 'Not authorized to cancel this booking' });
+    }
+
+    if (booking.status === 'completed') {
+      return res.status(400).json({ error: 'Cannot cancel a completed booking' });
+    }
+
+    if (booking.status === 'cancelled') {
+      return res.status(400).json({ error: 'Booking is already cancelled' });
+    }
+
+    await pool.query('UPDATE bookings SET status = $1 WHERE id = $2', ['cancelled', targetBookingId]);
+
+    await pool.query(
+      'UPDATE barber_profiles SET queue_count = GREATEST(queue_count - 1, 0) WHERE id = $1',
+      [booking.barber_id]
+    );
+
+    if (booking.queue_position && booking.queue_position > 0) {
+      await pool.query(
+        'UPDATE bookings SET queue_position = queue_position - 1 WHERE barber_id = $1 AND status = $2 AND queue_position > $3',
+        [booking.barber_id, 'pending', booking.queue_position]
+      );
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      const payload = {
+        bookingId: Number(targetBookingId),
+        status: 'cancelled',
+        byCustomer: true,
+        reason: reason || 'Customer cancelled',
+      };
+
+      io.to(`booking-${targetBookingId}`).emit('booking-status-updated', payload);
+      io.to(`user-${booking.customer_id}`).emit('booking-status-updated', payload);
+      if (booking.barber_user_id) {
+        io.to(`user-${booking.barber_user_id}`).emit('booking-status-updated', payload);
+        io.to(`user-${booking.barber_user_id}`).emit('booking-cancelled', payload);
+      }
+    }
+
+    if (booking.barber_user_id) {
+      sendPushToUser(booking.barber_user_id, {
+        title: 'Booking cancelled by customer',
+        body: 'A customer has cancelled their booking request.',
+        data: {
+          type: 'booking_status_updated',
+          bookingId: Number(targetBookingId),
+          status: 'cancelled',
+        },
+      }).catch(() => {});
+    }
+
+    return res.json({ success: true, bookingId: Number(targetBookingId), status: 'cancelled' });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

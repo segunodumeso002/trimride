@@ -274,7 +274,12 @@ export default function CustomerHomeScreen({ navigation }) {
         <TouchableOpacity
           style={[styles.resumeBanner, activeBooking.status === 'confirmed' ? styles.resumeConfirmed : styles.resumePending]}
           onPress={() => navigation.navigate('TrackBarber', {
-            barber: { name: activeBooking.shop_name, barberId: activeBooking.barber_id },
+            barber: {
+              name: activeBooking.shop_name,
+              barberId: activeBooking.barber_id,
+              latitude: Number(activeBooking.latitude),
+              longitude: Number(activeBooking.longitude),
+            },
             service: activeBooking.service_name || 'General Grooming',
             bookingId: activeBooking.id,
             queuePosition: activeBooking.queue_position,

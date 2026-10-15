@@ -47,7 +47,7 @@ jest.mock('react-native-sound-player', () => ({
   playUrl: jest.fn(),
   stop: jest.fn(),
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
-}));
+}), { virtual: true });
 
 jest.mock('react-native-skeleton-placeholder', () => {
   const React = require('react');
@@ -69,11 +69,42 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
+jest.mock('react-native-vector-icons/Feather', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return props => React.createElement(Text, props, props.name || 'feather-icon');
+});
+
+jest.mock('react-native-vector-icons/MaterialIcons', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return props => React.createElement(Text, props, props.name || 'material-icon');
+});
+
+jest.mock('react-native-vector-icons/Ionicons', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return props => React.createElement(Text, props, props.name || 'ionicons-icon');
+});
+
 jest.mock('@react-navigation/stack', () => {
+  const React = require('react');
+
   return {
     createStackNavigator: () => ({
       Navigator: ({ children }) => children,
-      Screen: () => null,
+      Screen: ({ component: Component, route = { params: {} } }) => {
+        if (!Component) {
+          return null;
+        }
+
+        const navigation = {
+          navigate: jest.fn(),
+          goBack: jest.fn(),
+        };
+
+        return React.createElement(Component, { navigation, route });
+      },
     }),
   };
 });

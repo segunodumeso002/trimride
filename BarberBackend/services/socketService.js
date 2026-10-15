@@ -47,7 +47,10 @@ module.exports = (io) => {
 
     // Real-time bidirectional in-app chat between customer and barber
     socket.on('chat:message', (data) => {
-      io.to(`booking-${data.bookingId}`).emit('chat:message:received', data);
+      const targetBookingId = data?.bookingId || data?.booking_id;
+      if (targetBookingId) {
+        io.to(`booking-${targetBookingId}`).emit('chat:message:received', data);
+      }
     });
 
     socket.on('disconnect', () => {

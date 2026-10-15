@@ -103,7 +103,8 @@ export default function LiveChatScreen({ route, navigation }) {
 
     const newMsgObj = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-      booking_id: bookingId,
+      bookingId: Number(bookingId),
+      booking_id: Number(bookingId),
       sender_type: senderType,
       sender_name: myName,
       message: text,

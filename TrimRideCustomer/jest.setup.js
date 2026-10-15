@@ -47,7 +47,7 @@ jest.mock('react-native-sound-player', () => ({
   playUrl: jest.fn(),
   stop: jest.fn(),
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
-}));
+}), { virtual: true });
 
 jest.mock('react-native-skeleton-placeholder', () => {
   const React = require('react');
@@ -61,6 +61,24 @@ jest.mock('react-native-linear-gradient', () => {
   const React = require('react');
   const { View } = require('react-native');
   return props => React.createElement(View, props, props.children);
+});
+
+jest.mock('react-native-vector-icons/Feather', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return props => React.createElement(Text, props, props.name || 'feather-icon');
+});
+
+jest.mock('react-native-vector-icons/MaterialIcons', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return props => React.createElement(Text, props, props.name || 'material-icon');
+});
+
+jest.mock('react-native-vector-icons/Ionicons', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return props => React.createElement(Text, props, props.name || 'ionicons-icon');
 });
 
 jest.mock('@react-navigation/native', () => {

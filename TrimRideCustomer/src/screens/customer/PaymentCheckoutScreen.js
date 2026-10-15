@@ -5,12 +5,11 @@ import { apiClient } from '../../services/apiClient';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 
 export default function PaymentCheckoutScreen({ route, navigation }) {
-  const { bookingId = 1, barberName = 'Featured Barber', service = 'Premium Fade', baseAmount = 25.00 } = route?.params || {};
+  const { bookingId = 1, barberId = 1, barberName = 'Featured Barber', service = 'Premium Fade', baseAmount = 25.00 } = route?.params || {};
   const [tip, setTip] = useState(5.00);
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [processing, setProcessing] = useState(false);
   const [completed, setCompleted] = useState(false);
-  const [paymentBreakdown, setPaymentBreakdown] = useState(null);
 
   const handleTipSelect = (amount) => {
     try {
@@ -34,14 +33,7 @@ export default function PaymentCheckoutScreen({ route, navigation }) {
     } catch (e) {}
 
     try {
-      const response = await apiClient.processPayment(Number(bookingId), Number(baseAmount), paymentMethod, tip);
-      setPaymentBreakdown(response.breakdown || {
-        grossFare: baseAmount,
-        tipAmount: tip,
-        platformCommission: Math.round(baseAmount * 0.20 * 100) / 100,
-        barberNetPayout: Math.round((baseAmount * 0.80 + tip) * 100) / 100,
-        totalCharged: baseAmount + tip
-      });
+      await apiClient.processPayment(Number(bookingId), Number(baseAmount), paymentMethod, tip);
       setCompleted(true);
       try {
         Vibration.vibrate([0, 200, 100, 300]);
@@ -91,6 +83,7 @@ export default function PaymentCheckoutScreen({ route, navigation }) {
               try { ReactNativeHapticFeedback.trigger('impactMedium', { enableVibrateFallback: true }); } catch (e) {}
               navigation.navigate('ReviewBarber', {
                 bookingId,
+                barberId,
                 barberName,
                 service,
               });

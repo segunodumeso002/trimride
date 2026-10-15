@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Vibration, View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
+import { Alert, AppState, Vibration, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import SoundPlayer from 'react-native-sound-player';
 import { colors, spacing } from '../../theme/tokens';
@@ -15,6 +15,8 @@ export default function BarberHubScreen({ navigation }) {
   const [togglingStatus, setTogglingStatus] = useState(false);
   const [queueCount, setQueueCount] = useState(0);
   const [requests, setRequests] = useState([]);
+  const [activeBooking, setActiveBooking] = useState(null);
+  const [completingBooking, setCompletingBooking] = useState(false);
   const [activeSimulationBookingId, setActiveSimulationBookingId] = useState(null);
   const [simulating, setSimulating] = useState(false);
   const [refreshingRequests, setRefreshingRequests] = useState(false);
@@ -50,6 +52,7 @@ export default function BarberHubScreen({ navigation }) {
 
   const handleSignOut = () => {
     setRequests([]);
+    setActiveBooking(null);
     setActiveSimulationBookingId(null);
     setSimulating(false);
     setIsOnline(false);
@@ -68,6 +71,23 @@ export default function BarberHubScreen({ navigation }) {
       setQueueCount(result?.queue_count || 0);
     } catch (_error) {
       setIsOnline(false);
+    }
+  }, [token]);
+
+  const loadActiveBooking = useCallback(async () => {
+    if (!token) {
+      setActiveBooking(null);
+      return;
+    }
+
+    try {
+      const data = await apiClient.getBarberActiveBooking(token);
+      setActiveBooking(data || null);
+      if (data?.id) {
+        setActiveSimulationBookingId(Number(data.id));
+      }
+    } catch (_error) {
+      setActiveBooking(null);
     }
   }, [token]);
 
@@ -102,18 +122,19 @@ export default function BarberHubScreen({ navigation }) {
     }
 
     try {
-      await loadRequests();
+      await Promise.all([loadRequests(), loadActiveBooking()]);
     } finally {
       if (showSpinner) {
         setRefreshingRequests(false);
       }
     }
-  }, [loadRequests, refreshingRequests, token]);
+  }, [loadRequests, loadActiveBooking, refreshingRequests, token]);
 
   useEffect(() => {
     loadRequests();
+    loadActiveBooking();
     loadOnlineStatus();
-  }, [loadRequests, loadOnlineStatus]);
+  }, [loadRequests, loadActiveBooking, loadOnlineStatus]);
 
   useFocusEffect(
     useCallback(() => {
@@ -225,6 +246,40 @@ export default function BarberHubScreen({ navigation }) {
     }
   };
 
+  const handleCompleteBooking = async (bookingId) => {
+    if (!token || completingBooking) {
+      return;
+    }
+
+    Alert.alert(
+      'Finish Session',
+      'Are you sure you want to mark this haircut as completed? This will finalize the ride and notify the customer.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Complete Cut',
+          onPress: async () => {
+            setCompletingBooking(true);
+            try {
+              ReactNativeHapticFeedback.trigger('notificationSuccess', { enableVibrateFallback: true });
+              await apiClient.completeBooking(token, bookingId);
+              setActiveBooking(null);
+              setActiveSimulationBookingId(null);
+              Alert.alert('Session Completed! ✂️', 'The booking has been marked completed and your queue has moved forward.');
+              await loadRequests();
+              await loadActiveBooking();
+              await loadOnlineStatus();
+            } catch (err) {
+              Alert.alert('Error', err.message || 'Could not complete session.');
+            } finally {
+              setCompletingBooking(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const respondToRequest = async (bookingId, action) => {
     if (!token) {
       return;
@@ -244,6 +299,8 @@ export default function BarberHubScreen({ navigation }) {
       }
 
       await loadRequests();
+      await loadActiveBooking();
+      await loadOnlineStatus();
     } catch (err) {
       Alert.alert(
         'Action failed',
@@ -361,11 +418,13 @@ export default function BarberHubScreen({ navigation }) {
             navigation.navigate('BarberEarnings');
           }}
         >
-          <View>
+          <View style={{ flex: 1, marginRight: 10 }}>
             <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 }}>FINANCIAL COMMAND CENTER</Text>
-            <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800', marginTop: 2 }}>📈 Earnings & Platform Royalties</Text>
+            <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '800', marginTop: 2 }} numberOfLines={1} ellipsizeMode="tail">📈 Earnings & Royalties</Text>
           </View>
-          <Text style={{ color: '#10B981', fontWeight: '900', fontSize: 15 }}>View ($) ➔</Text>
+          <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#10B981', flexShrink: 0 }}>
+            <Text style={{ color: '#10B981', fontWeight: '900', fontSize: 13 }}>View ($) ➔</Text>
+          </View>
         </TouchableOpacity>
 
         <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -437,6 +496,56 @@ export default function BarberHubScreen({ navigation }) {
             <Text style={styles.secondaryText}>Sign Out</Text>
           </TouchableOpacity>
         </ScrollView>
+
+      {activeBooking && (
+        <View style={styles.activeBookingCard}>
+          <View style={styles.activeBadgeRow}>
+            <View style={styles.liveDot} />
+            <Text style={styles.activeEyebrow}>ACTIVE IN-CHAIR SESSION</Text>
+            <Text style={styles.activeId}>#{activeBooking.id}</Text>
+          </View>
+          <Text style={styles.activeCustomerName}>
+            {activeBooking.first_name} {activeBooking.last_name}
+          </Text>
+          <Text style={styles.activeService}>
+            ✂️ {activeBooking.service_name || 'Executive Haircut'} • ${(activeBooking.total_amount || activeBooking.service_price || '25.00')}
+          </Text>
+          {activeBooking.phone ? (
+            <Text style={styles.activeMeta}>📞 {activeBooking.phone}</Text>
+          ) : null}
+          {activeBooking.customer_address ? (
+            <Text style={styles.activeMeta}>📍 {activeBooking.customer_address}</Text>
+          ) : null}
+
+          <View style={styles.activeActionsRow}>
+            <TouchableOpacity
+              style={[styles.completeButton, completingBooking && styles.completeButtonDisabled]}
+              onPress={() => handleCompleteBooking(activeBooking.id)}
+              disabled={completingBooking}
+            >
+              {completingBooking ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <Text style={styles.completeButtonText}>✓ Finish Cut & Complete</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.activeChatButton}
+              onPress={() => {
+                try { ReactNativeHapticFeedback.trigger('impactLight', { enableVibrateFallback: true }); } catch (e) {}
+                navigation.navigate('LiveChat', {
+                  bookingId: activeBooking.id,
+                  peerName: `${activeBooking.first_name} ${activeBooking.last_name}`,
+                  senderType: 'barber',
+                  service: activeBooking.service_name || 'Haircut',
+                });
+              }}
+            >
+              <Text style={styles.activeChatButtonText}>💬 Chat</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <Text style={styles.section}>Incoming Requests</Text>
       {refreshingRequests && requests.length === 0 ? (
@@ -706,5 +815,92 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontWeight: '700',
     fontSize: 12,
+  },
+  activeBookingCard: {
+    backgroundColor: '#0F1F35',
+    borderRadius: 18,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1.5,
+    borderColor: '#10B981',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  activeBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+    marginRight: 6,
+  },
+  activeEyebrow: {
+    color: '#10B981',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    flex: 1,
+  },
+  activeId: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  activeCustomerName: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  activeService: {
+    color: '#F59E0B',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 3,
+  },
+  activeMeta: {
+    color: '#CBD5E1',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  activeActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  completeButton: {
+    flex: 2,
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completeButtonDisabled: {
+    opacity: 0.6,
+  },
+  completeButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  activeChatButton: {
+    flex: 1,
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeChatButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
   },
 });

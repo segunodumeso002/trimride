@@ -158,6 +158,27 @@ export const apiClient = {
     });
   },
 
+  completeBooking(token, bookingId) {
+    return request(`/bookings/complete/${bookingId}`, {
+      method: 'POST',
+      headers: authHeader(token),
+    });
+  },
+ 
+  cancelBooking(token, bookingId, reason = '') {
+    return request(`/bookings/${bookingId}/cancel`, {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  getBarberActiveBooking(token) {
+    return request('/bookings/my-active', {
+      headers: authHeader(token),
+    });
+  },
+
   getBarberQueue(barberId) {
     return request(`/bookings/queue/${barberId}`);
   },
