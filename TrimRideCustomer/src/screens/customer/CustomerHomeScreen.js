@@ -1,21 +1,24 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, PermissionsAndroid, Platform, ActivityIndicator } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import UberBottomSheet from '../../components/UberBottomSheet';
 import Geolocation from 'react-native-geolocation-service';
 import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing } from '../../theme/tokens';
 import { useAppMode } from '../../context/AppModeContext';
 import { apiClient } from '../../services/apiClient';
 import { connectSocket } from '../../services/socketClient';
 import { BarberListSkeleton } from '../../components/skeletons/BarberListSkeleton';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
+import { getCountryCoordinates } from '../../utils/countryLocation';
+
 const DEMO_COORDS = { latitude: -26.2041, longitude: 28.0473 };
-const DEFAULT_COORDS = DEMO_COORDS;
 
 export default function CustomerHomeScreen({ navigation }) {
-  const { signOut, user, token } = useAppMode();
-  const bottomSheetRef = React.useRef(null);
+  const { signOut, user, token, isFirstLoginSession, consumeFirstLoginSession } = useAppMode();
+  const mapRef = useRef(null);
+  const bottomSheetRef = useRef(null);
   const [barbers, setBarbers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -25,12 +28,16 @@ export default function CustomerHomeScreen({ navigation }) {
   const [activeBooking, setActiveBooking] = useState(null);
   const [bookingHistory, setBookingHistory] = useState([]);
 
+  const userCountryCoords = useMemo(() => {
+    return getCountryCoordinates(user?.country, user?.phone);
+  }, [user?.country, user?.phone]);
+
   const serviceFilters = ['fade', 'beard', 'braids'];
   const featuredBarber = barbers[0] || null;
   const remainingBarbers = featuredBarber ? barbers.slice(1) : [];
 
   const getCurrentLocation = useCallback(() => new Promise(resolve => {
-    const fallback = () => resolve(DEFAULT_COORDS);
+    const fallback = () => resolve(userCountryCoords);
     if (Platform.OS === 'android') {
       PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
@@ -57,7 +64,41 @@ export default function CustomerHomeScreen({ navigation }) {
         { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
       );
     }
-  }), []);
+  }), [userCountryCoords]);
+
+  // On first login on a user (both new or old), center default map view on registration country
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let isMounted = true;
+    const applyRegistrationCountryMapLocation = async () => {
+      try {
+        const key = `@trimride_first_login_map_centered_${user.id}`;
+        const alreadyCentered = await AsyncStorage.getItem(key);
+
+        if (!alreadyCentered || isFirstLoginSession) {
+          if (mapRef.current && isMounted) {
+            mapRef.current.animateToRegion({
+              latitude: userCountryCoords.latitude,
+              longitude: userCountryCoords.longitude,
+              latitudeDelta: userCountryCoords.latitudeDelta,
+              longitudeDelta: userCountryCoords.longitudeDelta,
+            }, 1000);
+          }
+          await AsyncStorage.setItem(key, 'true');
+          if (isFirstLoginSession && consumeFirstLoginSession) {
+            consumeFirstLoginSession();
+          }
+        }
+      } catch (_e) {}
+    };
+
+    const timer = setTimeout(applyRegistrationCountryMapLocation, 500);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [user?.id, userCountryCoords, isFirstLoginSession, consumeFirstLoginSession]);
 
   const loadDispatch = useCallback(async (refreshMode = false) => {
     if (refreshMode) {
@@ -233,7 +274,9 @@ export default function CustomerHomeScreen({ navigation }) {
     <>
       <View style={styles.topRow}>
         <View style={styles.titleWrap}>
-          <Text style={styles.eyebrow}>TrimRide</Text>
+          <Text style={styles.eyebrow}>
+            TrimRide{userCountryCoords.name ? ` • ${userCountryCoords.flag || ''} ${userCountryCoords.name}` : ''}
+          </Text>
           <Text style={styles.title}>Book your next barber</Text>
           <Text style={styles.subtitle}>See nearby availability, request fast, and track every step live.</Text>
         </View>
@@ -399,21 +442,22 @@ export default function CustomerHomeScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <MapView
+        ref={mapRef}
         style={StyleSheet.absoluteFillObject}
         provider={PROVIDER_GOOGLE}
         initialRegion={{
-          latitude: DEFAULT_COORDS.latitude,
-          longitude: DEFAULT_COORDS.longitude,
-          latitudeDelta: 0.0922,
-          longitudeDelta: 0.0421,
+          latitude: userCountryCoords.latitude,
+          longitude: userCountryCoords.longitude,
+          latitudeDelta: userCountryCoords.latitudeDelta,
+          longitudeDelta: userCountryCoords.longitudeDelta,
         }}
       >
         {barbers.map(barber => (
           <Marker
             key={barber.id}
             coordinate={{
-              latitude: Number.isFinite(barber.latitude) ? barber.latitude : DEFAULT_COORDS.latitude,
-              longitude: Number.isFinite(barber.longitude) ? barber.longitude : DEFAULT_COORDS.longitude,
+              latitude: Number.isFinite(barber.latitude) ? barber.latitude : userCountryCoords.latitude,
+              longitude: Number.isFinite(barber.longitude) ? barber.longitude : userCountryCoords.longitude,
             }}
             title={barber.name}
             description={barber.eta}
@@ -424,6 +468,27 @@ export default function CustomerHomeScreen({ navigation }) {
           </Marker>
         ))}
       </MapView>
+
+      {/* Floating country badge & re-center button */}
+      <View style={styles.mapControlOverlay} pointerEvents="box-none">
+        <TouchableOpacity
+          style={styles.countryPill}
+          activeOpacity={0.85}
+          onPress={() => {
+            try { ReactNativeHapticFeedback.trigger('impactLight', { enableVibrateFallback: true }); } catch (_) {}
+            mapRef.current?.animateToRegion({
+              latitude: userCountryCoords.latitude,
+              longitude: userCountryCoords.longitude,
+              latitudeDelta: userCountryCoords.latitudeDelta,
+              longitudeDelta: userCountryCoords.longitudeDelta,
+            }, 800);
+          }}
+          accessibilityLabel={`Center map on ${userCountryCoords.name || 'Registration Country'}`}
+        >
+          <Text style={styles.countryPillFlag}>{userCountryCoords.flag || '📍'}</Text>
+          <Text style={styles.countryPillText}>{userCountryCoords.name || 'Registered Country'}</Text>
+        </TouchableOpacity>
+      </View>
 
       <UberBottomSheet initialSnapIndex={2}>
         <FlatList
@@ -848,4 +913,34 @@ const styles = StyleSheet.create({
     color: '#92400E',
   },
   meta: { marginTop: spacing.xs, color: colors.steel },
+  mapControlOverlay: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 56 : 24,
+    right: spacing.lg,
+    zIndex: 10,
+  },
+  countryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.88)',
+    borderRadius: 20,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  countryPillFlag: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  countryPillText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '700',
+  },
 });

@@ -56,6 +56,7 @@ export default function AuthScreen() {
 
       setLoading(true);
       try {
+        const countryName = selectedCountry?.name || '';
         const payload = await apiClient.register({
           email: email.trim(),
           password,
@@ -65,11 +66,19 @@ export default function AuthScreen() {
           address: address.trim() || null,
           city: city.trim() || null,
           state: stateName.trim() || null,
-          country: selectedCountry?.name || '',
+          country: countryName,
           userType: 'customer',
         });
 
-        await establishSession({ token: payload.token, user: payload.user });
+        await establishSession({
+          token: payload.token,
+          user: {
+            ...payload.user,
+            country: payload.user?.country || countryName,
+            phone: payload.user?.phone || parsedPhone.number,
+          },
+          isFirstLogin: true,
+        });
       } catch (error) {
         Alert.alert('Error', error.message);
       } finally {
@@ -81,7 +90,11 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       const payload = await apiClient.login(email.trim(), password);
-      await establishSession({ token: payload.token, user: payload.user });
+      await establishSession({
+        token: payload.token,
+        user: payload.user,
+        isFirstLogin: true,
+      });
     } catch (error) {
       Alert.alert('Error', error.message);
     } finally {

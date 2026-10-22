@@ -16,6 +16,7 @@ export function AppModeProvider({ children, defaultRole }) {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [isRestoring, setIsRestoring] = useState(true);
+  const [isFirstLoginSession, setIsFirstLoginSession] = useState(false);
   const { addNotification } = useNotifications();
 
   const attachSocketListeners = useCallback((sessionToken, userType) => {
@@ -54,11 +55,18 @@ export function AppModeProvider({ children, defaultRole }) {
             throw new Error('Invalid session payload');
           }
 
+          const mergedUser = {
+            ...parsed.user,
+            ...nextUser,
+            country: nextUser.country || parsed.user?.country || '',
+          };
+
           setToken(parsed.token);
-          setUser(nextUser);
-          setRole(nextUser.userType);
+          setUser(mergedUser);
+          setRole(mergedUser.userType);
           setIsSignedIn(true);
-          attachSocketListeners(parsed.token, nextUser.userType);
+          setIsFirstLoginSession(false);
+          attachSocketListeners(parsed.token, mergedUser.userType);
           if (ENABLE_FCM) {
             // Re-register FCM token on session restore
             const fcmToken = await fcmService.getFCMToken();
@@ -74,6 +82,7 @@ export function AppModeProvider({ children, defaultRole }) {
         setUser(null);
         setRole(null);
         setIsSignedIn(false);
+        setIsFirstLoginSession(false);
       } finally {
         setIsRestoring(false);
       }
@@ -92,6 +101,7 @@ export function AppModeProvider({ children, defaultRole }) {
       setUser(null);
       setRole(null);
       setIsSignedIn(false);
+      setIsFirstLoginSession(false);
       AsyncStorage.removeItem(SESSION_KEY);
     });
     return () => setUnauthorizedHandler(null);
@@ -113,7 +123,7 @@ export function AppModeProvider({ children, defaultRole }) {
     initFCM().catch(() => {});
   }, [addNotification]);
 
-  const establishSession = useCallback(async ({ token: nextToken, user: nextUser }) => {
+  const establishSession = useCallback(async ({ token: nextToken, user: nextUser, isFirstLogin = false }) => {
     const normalizedUser = {
       ...nextUser,
       userType: nextUser.userType || nextUser.user_type,
@@ -123,6 +133,7 @@ export function AppModeProvider({ children, defaultRole }) {
     setUser(normalizedUser);
     setRole(normalizedUser.userType);
     setIsSignedIn(true);
+    setIsFirstLoginSession(Boolean(isFirstLogin));
 
     attachSocketListeners(nextToken, normalizedUser.userType);
 
@@ -147,6 +158,8 @@ export function AppModeProvider({ children, defaultRole }) {
       token,
       user,
       isRestoring,
+      isFirstLoginSession,
+      consumeFirstLoginSession: () => setIsFirstLoginSession(false),
       establishSession,
       signInAsCustomer: () => {
         setRole('customer');
@@ -170,10 +183,11 @@ export function AppModeProvider({ children, defaultRole }) {
         setUser(null);
         setRole(null);
         setIsSignedIn(false);
+        setIsFirstLoginSession(false);
         AsyncStorage.removeItem(SESSION_KEY);
       },
     }),
-    [role, isSignedIn, token, user, isRestoring, establishSession]
+    [role, isSignedIn, token, user, isRestoring, isFirstLoginSession, establishSession]
   );
 
   return <AppModeContext.Provider value={value}>{children}</AppModeContext.Provider>;

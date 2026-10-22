@@ -77,7 +77,7 @@ async function createLocalUser({ email, password, firstName, lastName, userType,
   const hashedPassword = await bcrypt.hash(password, 10);
 
   const result = await pool.query(
-    'INSERT INTO users (email, password_hash, first_name, last_name, user_type, phone, profile_image, address, city, state, country) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, email, first_name, last_name, user_type',
+    'INSERT INTO users (email, password_hash, first_name, last_name, user_type, phone, profile_image, address, city, state, country) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, email, first_name, last_name, user_type, phone, country',
     [email, hashedPassword, firstName, lastName, userType, phone || null, profile_image, address || null, city || null, state || null, country || null]
   );
 
@@ -223,15 +223,18 @@ router.post('/login', validate(loginSchema), async (req, res) => {
 
         const firebaseUser = localResult.rows[0];
         const token = createJwtForUser(firebaseUser.id);
+        const userPayload = {
+          id: firebaseUser.id,
+          email: firebaseUser.email,
+          firstName: firebaseUser.first_name,
+          lastName: firebaseUser.last_name,
+          userType: firebaseUser.user_type,
+        };
+        if (firebaseUser.phone) userPayload.phone = firebaseUser.phone;
+        if (firebaseUser.country) userPayload.country = firebaseUser.country;
         return res.json({
           token,
-          user: {
-            id: firebaseUser.id,
-            email: firebaseUser.email,
-            firstName: firebaseUser.first_name,
-            lastName: firebaseUser.last_name,
-            userType: firebaseUser.user_type,
-          },
+          user: userPayload,
         });
       } catch (firebaseError) {
         if (firebaseError.code === 'firebase/web-api-key-missing') {
@@ -261,7 +264,16 @@ router.post('/login', validate(loginSchema), async (req, res) => {
     }
 
     const token = createJwtForUser(user.id);
-    res.json({ token, user: { id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name, userType: user.user_type } });
+    const userPayload = {
+      id: user.id,
+      email: user.email,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      userType: user.user_type,
+    };
+    if (user.phone) userPayload.phone = user.phone;
+    if (user.country) userPayload.country = user.country;
+    res.json({ token, user: userPayload });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -271,7 +283,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, first_name, last_name, user_type, phone FROM users WHERE id = $1',
+      'SELECT id, email, first_name, last_name, user_type, phone, country FROM users WHERE id = $1',
       [req.userId]
     );
 
@@ -279,15 +291,19 @@ router.get('/me', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    const row = result.rows[0];
+    const userPayload = {
+      id: row.id,
+      email: row.email,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      phone: row.phone,
+      userType: row.user_type,
+    };
+    if (row.country) userPayload.country = row.country;
+
     return res.json({
-      user: {
-        id: result.rows[0].id,
-        email: result.rows[0].email,
-        firstName: result.rows[0].first_name,
-        lastName: result.rows[0].last_name,
-        phone: result.rows[0].phone,
-        userType: result.rows[0].user_type,
-      },
+      user: userPayload,
     });
   } catch (error) {
     return res.status(500).json({ error: error.message });
