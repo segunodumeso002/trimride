@@ -3,6 +3,26 @@ const router = express.Router();
 const pool = require('../config/database');
 const requireAuth = require('../middleware/auth');
 const { sendPushToUser } = require('../services/pushService');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const uploadsDir = path.join(__dirname, '..', 'public', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname || '') || '.jpg';
+    cb(null, 'style-' + uniqueSuffix + ext);
+  },
+});
+const upload = multer({ storage });
 
 function normalizedEnvEmail(key) {
   if (
@@ -14,9 +34,21 @@ function normalizedEnvEmail(key) {
   return String(process.env[key] || '').trim().toLowerCase();
 }
 
+// Upload haircut style reference photo
+router.post('/upload-style-photo', requireAuth, upload.single('photo'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No image file provided' });
+  }
+  const photoUrl = '/uploads/' + req.file.filename;
+  return res.json({ photoUrl });
+});
+
 // Book a service
 router.post('/book', requireAuth, async (req, res) => {
-  const { barberId, barber_id, id, serviceId, bookingType } = req.body;
+  const {
+    barberId, barber_id, id, serviceId, bookingType,
+    referencePhoto, reference_photo, notes,
+  } = req.body;
   const customerId = req.userId;
   const normalizedBarberId = Number(barberId || barber_id || id || 0);
   const demoLockedCustomerEmail = normalizedEnvEmail('DEMO_LOCK_CUSTOMER_EMAIL');
@@ -27,6 +59,9 @@ router.post('/book', requireAuth, async (req, res) => {
   }
 
   const normalizedBookingType = bookingType || 'queue';
+  const finalReferencePhoto = referencePhoto || reference_photo || null;
+  const finalNotes = notes ? String(notes).trim() : null;
+  const verificationPin = String(Math.floor(1000 + Math.random() * 9000));
   
   try {
     const io = req.app.get('io');
@@ -83,8 +118,21 @@ router.post('/book', requireAuth, async (req, res) => {
     
     // Create booking
     const result = await pool.query(
-      'INSERT INTO bookings (customer_id, barber_id, service_id, booking_type, queue_position, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [customerId, normalizedBarberId, serviceId || null, normalizedBookingType, queuePosition, 'pending']
+      `INSERT INTO bookings (
+         customer_id, barber_id, service_id, booking_type, queue_position, status,
+         reference_photo, notes, verification_pin
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [
+        customerId,
+        normalizedBarberId,
+        serviceId || null,
+        normalizedBookingType,
+        queuePosition,
+        'pending',
+        finalReferencePhoto,
+        finalNotes,
+        verificationPin,
+      ]
     );
 
     // Update barber queue count
@@ -99,6 +147,9 @@ router.post('/book', requireAuth, async (req, res) => {
       customerId,
       barberId: normalizedBarberId,
       queuePosition,
+      referencePhoto: result.rows[0].reference_photo,
+      notes: result.rows[0].notes,
+      verificationPin: result.rows[0].verification_pin,
     });
 
     sendPushToUser(barberUserId, {
@@ -118,17 +169,18 @@ router.post('/book', requireAuth, async (req, res) => {
   }
 });
 
-// Get customer's current active booking (pending or confirmed)
+// Get customer's current active booking (pending, confirmed, or in_progress)
 router.get('/my-booking', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT b.id, b.status, b.queue_position, b.barber_id,
+              b.reference_photo, b.notes, b.verification_pin,
               bp.shop_name, bp.latitude, bp.longitude,
               s.name AS service_name
        FROM bookings b
        JOIN barber_profiles bp ON b.barber_id = bp.id
        LEFT JOIN services s ON b.service_id = s.id
-       WHERE b.customer_id = $1 AND b.status IN ('pending', 'confirmed')
+       WHERE b.customer_id = $1 AND b.status IN ('pending', 'confirmed', 'in_progress')
        ORDER BY b.created_at DESC
        LIMIT 1`,
       [req.userId]
@@ -149,6 +201,7 @@ router.get('/my-bookings', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT b.id, b.status, b.queue_position, b.created_at,
+              b.reference_photo, b.notes, b.verification_pin,
               b.barber_id, bp.shop_name,
               s.name AS service_name
        FROM bookings b
@@ -163,6 +216,89 @@ router.get('/my-bookings', requireAuth, async (req, res) => {
     return res.json(result.rows);
   } catch (error) {
     return res.status(500).json({ error: error.message });
+  }
+});
+
+// Get customer favorites
+router.get('/favorites', requireAuth, async (req, res) => {
+  const customerId = req.userId;
+  try {
+    const result = await pool.query(
+      `SELECT bp.id, bp.user_id, bp.shop_name, bp.shop_address, bp.latitude, bp.longitude,
+              bp.rating, bp.queue_count, bp.estimated_wait_time, bp.is_active, bp.shop_image,
+              fb.created_at AS favorited_at
+       FROM favorite_barbers fb
+       JOIN barber_profiles bp ON bp.id = fb.barber_id
+       WHERE fb.customer_id = $1
+       ORDER BY fb.created_at DESC`,
+      [customerId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Toggle favorite barber
+router.post('/favorites/toggle', requireAuth, async (req, res) => {
+  const customerId = req.userId;
+  const { barberId, barber_id } = req.body;
+  const normalizedBarberId = Number(barberId || barber_id);
+
+  if (!Number.isFinite(normalizedBarberId) || normalizedBarberId <= 0) {
+    return res.status(400).json({ error: 'barberId is required' });
+  }
+
+  try {
+    const check = await pool.query(
+      'SELECT id FROM favorite_barbers WHERE customer_id = $1 AND barber_id = $2',
+      [customerId, normalizedBarberId]
+    );
+
+    if (check.rows.length > 0) {
+      await pool.query(
+        'DELETE FROM favorite_barbers WHERE customer_id = $1 AND barber_id = $2',
+        [customerId, normalizedBarberId]
+      );
+      return res.json({ isFavorite: false, barberId: normalizedBarberId });
+    } else {
+      await pool.query(
+        'INSERT INTO favorite_barbers (customer_id, barber_id) VALUES ($1, $2)',
+        [customerId, normalizedBarberId]
+      );
+      return res.json({ isFavorite: true, barberId: normalizedBarberId });
+    }
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Get customer loyalty punch card status
+router.get('/loyalty', requireAuth, async (req, res) => {
+  const customerId = req.userId;
+  try {
+    const totalResult = await pool.query(
+      `SELECT COUNT(*)::int AS total_completed_cuts
+       FROM bookings
+       WHERE customer_id = $1 AND status = 'completed'`,
+      [customerId]
+    );
+    const totalCuts = totalResult.rows[0]?.total_completed_cuts || 0;
+    const punchCycle = 5;
+    const currentPunches = totalCuts % punchCycle;
+    const isRewardUnlocked = currentPunches === 0 && totalCuts > 0;
+    const nextRewardIn = isRewardUnlocked ? 0 : punchCycle - currentPunches;
+
+    res.json({
+      totalCompletedCuts: totalCuts,
+      punchCycle,
+      currentPunches,
+      isRewardUnlocked,
+      nextRewardIn,
+      rewardText: isRewardUnlocked ? '🎉 20% OFF Reward Unlocked!' : `${nextRewardIn} more cut${nextRewardIn === 1 ? '' : 's'} until 20% off!`,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

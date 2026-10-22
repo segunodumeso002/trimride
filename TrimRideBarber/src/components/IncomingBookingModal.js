@@ -6,8 +6,10 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
+  Image,
 } from 'react-native';
 import { colors, spacing } from '../theme/tokens';
+import { runtimeConfig } from '../config/runtimeConfig';
 
 export default function IncomingBookingModal({
   visible,
@@ -141,6 +143,28 @@ export default function IncomingBookingModal({
                 <Text style={styles.detailValue}>{request.eta}</Text>
               </View>
             </View>
+
+            {/* Style notes / photo if customer attached */}
+            {(request.referencePhoto || request.notes) && (
+              <View style={styles.styleBox}>
+                {request.referencePhoto ? (
+                  <Image
+                    source={{
+                      uri: request.referencePhoto.startsWith('http')
+                        ? request.referencePhoto
+                        : `${runtimeConfig.socketBaseUrl}${request.referencePhoto}`,
+                    }}
+                    style={styles.modalStylePhoto}
+                  />
+                ) : null}
+                <View style={{ flex: 1, paddingLeft: request.referencePhoto ? 10 : 0 }}>
+                  <Text style={styles.styleBoxLabel}>✂️ Requested Style & Notes</Text>
+                  <Text style={styles.styleBoxNotes} numberOfLines={2}>
+                    {request.notes || 'Reference Photo Attached'}
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
 
           {/* Actions */}
@@ -311,5 +335,35 @@ const styles = StyleSheet.create({
     color: colors.steel,
     fontSize: 15,
     fontWeight: '700',
+  },
+  styleBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#262626',
+    borderRadius: 14,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#404040',
+  },
+  modalStylePhoto: {
+    width: 54,
+    height: 54,
+    borderRadius: 8,
+    backgroundColor: '#333',
+  },
+  styleBoxLabel: {
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  styleBoxNotes: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
   },
 });

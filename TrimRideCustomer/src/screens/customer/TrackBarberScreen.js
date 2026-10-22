@@ -1,17 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Vibration, Alert, Platform, PermissionsAndroid, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Vibration, Alert, Platform, PermissionsAndroid, Linking, Image } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import Geolocation from 'react-native-geolocation-service';
 import { colors, spacing } from '../../theme/tokens';
 import { connectSocket } from '../../services/socketClient';
 import { useAppMode } from '../../context/AppModeContext';
 import { apiClient } from '../../services/apiClient';
+import { runtimeConfig } from '../../config/runtimeConfig';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 
 export default function TrackBarberScreen({ route, navigation }) {
-  const { barber, service, bookingId, queuePosition, clientsAhead, initialStatus } = route?.params || {};
+  const { barber, service, bookingId, queuePosition, clientsAhead, initialStatus, verificationPin: paramPin, referencePhoto: paramPhoto, notes: paramNotes } = route?.params || {};
   const [eta, setEta] = useState(7);
   const [status, setStatus] = useState(initialStatus || 'pending');
+  const [verificationPin, setVerificationPin] = useState(paramPin || null);
+  const [referencePhoto, setReferencePhoto] = useState(paramPhoto || null);
+  const [notes, setNotes] = useState(paramNotes || null);
 
   const initialBarberCoord = useMemo(() => {
     const lat = Number(barber?.latitude);
@@ -61,8 +65,12 @@ export default function TrackBarberScreen({ route, navigation }) {
   };
 
   const getStatusCopy = () => {
+    if (status === 'in_progress') {
+      return `PIN verified! ${barber.name} has started your haircut service in the chair.`;
+    }
+
     if (status === 'confirmed') {
-      return `Confirmed. Head to ${barber.name}'s shop for your session.`;
+      return `Confirmed. Head to ${barber.name}'s shop and share your 4-digit PIN to begin.`;
     }
 
     if (status === 'cancelled') {
@@ -77,6 +85,10 @@ export default function TrackBarberScreen({ route, navigation }) {
   };
 
   const getHeadline = () => {
+    if (status === 'in_progress') {
+      return `Haircut In Progress ✂️`;
+    }
+
     if (status === 'confirmed') {
       return `Head to ${barber.name}'s shop`;
     }
@@ -93,6 +105,7 @@ export default function TrackBarberScreen({ route, navigation }) {
   };
 
   const getStatusToneStyle = () => {
+    if (status === 'in_progress') return styles.toneInProgress;
     if (status === 'confirmed') return styles.toneConfirmed;
     if (status === 'completed') return styles.toneCompleted;
     if (status === 'cancelled') return styles.toneCancelled;
@@ -100,7 +113,8 @@ export default function TrackBarberScreen({ route, navigation }) {
   };
 
   const stages = useMemo(() => {
-    const accepted = status === 'confirmed' || status === 'completed';
+    const accepted = status === 'confirmed' || status === 'in_progress' || status === 'completed';
+    const inChair = status === 'in_progress' || status === 'completed';
     const completed = status === 'completed';
     const cancelled = status === 'cancelled';
 
@@ -119,9 +133,15 @@ export default function TrackBarberScreen({ route, navigation }) {
       },
       {
         key: 'arrival',
-        label: completed ? 'Service completed' : accepted ? 'Head to shop' : 'Tracking on standby',
-        detail: completed ? 'Session closed successfully' : accepted ? 'Navigate to the destination marker' : 'Coordinates update as soon as route starts',
+        label: inChair ? 'PIN verified • In chair' : accepted ? 'Head to shop & show PIN' : 'Tracking on standby',
+        detail: inChair ? 'Service currently in progress' : accepted ? 'Navigate to the destination marker' : 'Coordinates update as soon as route starts',
         active: accepted || completed,
+      },
+      {
+        key: 'completion',
+        label: completed ? 'Service completed' : 'Finish & receipt',
+        detail: completed ? 'Session closed successfully' : 'Receipt & review available upon completion',
+        active: completed,
       },
     ];
   }, [bookingId, status]);
@@ -289,6 +309,15 @@ export default function TrackBarberScreen({ route, navigation }) {
           if (booking && Number(booking.id) === Number(bookingId)) {
             if (booking.status) {
               setStatus(booking.status);
+            }
+            if (booking.verification_pin) {
+              setVerificationPin(booking.verification_pin);
+            }
+            if (booking.reference_photo) {
+              setReferencePhoto(booking.reference_photo);
+            }
+            if (booking.notes) {
+              setNotes(booking.notes);
             }
             const bLat = Number(booking.latitude);
             const bLng = Number(booking.longitude);
@@ -528,6 +557,59 @@ export default function TrackBarberScreen({ route, navigation }) {
         )}
       </View>
 
+      {/* Feature 3: 4-Digit Service Verification PIN Card */}
+      {verificationPin && status !== 'cancelled' ? (
+        <View style={styles.pinCard}>
+          <View style={styles.pinHeaderRow}>
+            <Text style={styles.pinEyebrow}>🔐 SERVICE VERIFICATION PIN</Text>
+            <View style={[styles.pinBadge, status === 'in_progress' ? styles.pinBadgeVerified : styles.pinBadgePending]}>
+              <Text style={styles.pinBadgeText}>
+                {status === 'in_progress' ? '✓ PIN Verified' : 'Give to Barber'}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.pinInstruction}>
+            {status === 'in_progress'
+              ? 'Your PIN was verified and your haircut is underway in the chair.'
+              : `Share this 4-digit code with ${barber.name} when you sit in the chair to start service:`}
+          </Text>
+          <View style={styles.pinDigitsContainer}>
+            {String(verificationPin).padStart(4, '0').split('').map((digit, i) => (
+              <View key={i} style={[styles.pinDigitTile, status === 'in_progress' && styles.pinDigitTileVerified]}>
+                <Text style={[styles.pinDigitText, status === 'in_progress' && styles.pinDigitTextVerified]}>{digit}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.pinSecuritySubtext}>
+            🛡️ Uber-style service protection • Ensures only verified appointments start
+          </Text>
+        </View>
+      ) : null}
+
+      {/* Feature 1: Style Preset & Reference Photo Snapshot */}
+      {(referencePhoto || notes) ? (
+        <View style={styles.styleCard}>
+          <Text style={styles.styleCardHeader}>✂️ Haircut Style Request</Text>
+          <View style={styles.styleCardBody}>
+            {referencePhoto ? (
+              <Image
+                source={{
+                  uri: referencePhoto.startsWith('http')
+                    ? referencePhoto
+                    : `${runtimeConfig.socketBaseUrl}${referencePhoto}`,
+                }}
+                style={styles.stylePhotoThumbnail}
+              />
+            ) : null}
+            <View style={styles.styleDetailsWrap}>
+              <Text style={styles.styleDetailsLabel}>Requested Style & Instructions:</Text>
+              <Text style={styles.styleDetailsText}>{notes || 'Standard Barber Cut'}</Text>
+              <Text style={styles.styleDetailsHint}>Transmitted to your barber on dispatch</Text>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>Route status</Text>
         {stages.map((stage, index) => (
@@ -577,6 +659,11 @@ const styles = StyleSheet.create({
   },
   toneConfirmed: {
     backgroundColor: '#102A1D',
+  },
+  toneInProgress: {
+    backgroundColor: '#064E3B',
+    borderWidth: 1.5,
+    borderColor: '#10B981',
   },
   toneCompleted: {
     backgroundColor: '#0F1F35',
@@ -854,7 +941,141 @@ const styles = StyleSheet.create({
   },
   status_pending: { backgroundColor: '#F59E0B' },
   status_confirmed: { backgroundColor: '#10B981' },
+  status_in_progress: { backgroundColor: '#059669' },
   status_cancelled: { backgroundColor: '#EF4444' },
   status_completed: { backgroundColor: '#6B7280' },
   statusBadgeText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
+  pinCard: {
+    backgroundColor: '#0F172A',
+    borderRadius: 20,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1.5,
+    borderColor: '#38BDF8',
+    shadowColor: '#38BDF8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  pinHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  pinEyebrow: {
+    color: '#38BDF8',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  pinBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  pinBadgePending: {
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#0284C7',
+  },
+  pinBadgeVerified: {
+    backgroundColor: '#064E3B',
+    borderWidth: 1,
+    borderColor: '#10B981',
+  },
+  pinBadgeText: {
+    color: '#F8FAFC',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  pinInstruction: {
+    color: '#CBD5E1',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: spacing.md,
+  },
+  pinDigitsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  pinDigitTile: {
+    width: 58,
+    height: 64,
+    borderRadius: 14,
+    backgroundColor: '#1E293B',
+    borderWidth: 2,
+    borderColor: '#0284C7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 6,
+  },
+  pinDigitTileVerified: {
+    backgroundColor: '#064E3B',
+    borderColor: '#10B981',
+  },
+  pinDigitText: {
+    color: '#F8FAFC',
+    fontSize: 32,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  pinDigitTextVerified: {
+    color: '#34D399',
+  },
+  pinSecuritySubtext: {
+    color: '#64748B',
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  styleCard: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.soft,
+  },
+  styleCardHeader: {
+    color: colors.charcoal,
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: spacing.sm,
+  },
+  styleCardBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stylePhotoThumbnail: {
+    width: 68,
+    height: 68,
+    borderRadius: 10,
+    backgroundColor: '#E2E8F0',
+    marginRight: 12,
+  },
+  styleDetailsWrap: {
+    flex: 1,
+  },
+  styleDetailsLabel: {
+    fontSize: 11,
+    color: colors.steel,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  styleDetailsText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.charcoal,
+    marginTop: 2,
+  },
+  styleDetailsHint: {
+    fontSize: 11,
+    color: '#16A34A',
+    fontWeight: '600',
+    marginTop: 4,
+  },
 });

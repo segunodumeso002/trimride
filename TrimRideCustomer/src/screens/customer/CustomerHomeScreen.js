@@ -27,14 +27,29 @@ export default function CustomerHomeScreen({ navigation }) {
   const [selectedService, setSelectedService] = useState('fade');
   const [activeBooking, setActiveBooking] = useState(null);
   const [bookingHistory, setBookingHistory] = useState([]);
+  const [favoriteIds, setFavoriteIds] = useState(new Set());
+  const [loyalty, setLoyalty] = useState(null);
 
   const userCountryCoords = useMemo(() => {
     return getCountryCoordinates(user?.country, user?.phone);
   }, [user?.country, user?.phone]);
 
-  const serviceFilters = ['fade', 'beard', 'braids'];
-  const featuredBarber = barbers[0] || null;
-  const remainingBarbers = featuredBarber ? barbers.slice(1) : [];
+  const serviceFilters = [
+    { key: 'fade', label: 'Fade' },
+    { key: 'beard', label: 'Beard' },
+    { key: 'braids', label: 'Braids' },
+    { key: 'regulars', label: '❤️ My Regulars' },
+  ];
+
+  const displayBarbers = useMemo(() => {
+    if (selectedService === 'regulars') {
+      return barbers.filter(b => favoriteIds.has(Number(b.barberId || b.id)));
+    }
+    return barbers;
+  }, [barbers, selectedService, favoriteIds]);
+
+  const featuredBarber = displayBarbers[0] || null;
+  const remainingBarbers = featuredBarber ? displayBarbers.slice(1) : [];
 
   const getCurrentLocation = useCallback(() => new Promise(resolve => {
     const fallback = () => resolve(userCountryCoords);
@@ -111,11 +126,12 @@ export default function CustomerHomeScreen({ navigation }) {
 
     try {
       const coords = await getCurrentLocation();
+      const serviceQuery = selectedService === 'regulars' ? '' : selectedService;
       let data = await apiClient.getDispatchBarbers(
         coords.latitude,
         coords.longitude,
         8,
-        selectedService,
+        serviceQuery,
         user?.id || null
       );
 
@@ -125,7 +141,7 @@ export default function CustomerHomeScreen({ navigation }) {
           DEMO_COORDS.latitude,
           DEMO_COORDS.longitude,
           8,
-          selectedService,
+          serviceQuery,
           user?.id || null
         );
       }
@@ -172,12 +188,57 @@ export default function CustomerHomeScreen({ navigation }) {
       .catch(() => setBookingHistory([]));
   }, [token]);
 
+  const loadFavorites = useCallback(async () => {
+    if (!token) return;
+    try {
+      const favs = await apiClient.getFavorites(token);
+      if (Array.isArray(favs)) {
+        setFavoriteIds(new Set(favs.map(f => Number(f.id || f.barber_id))));
+      }
+    } catch (_e) {}
+  }, [token]);
+
+  const loadLoyalty = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await apiClient.getLoyalty(token);
+      setLoyalty(data || null);
+    } catch (_e) {}
+  }, [token]);
+
+  const toggleFavorite = async (barberId) => {
+    if (!token || !barberId) return;
+    try {
+      ReactNativeHapticFeedback.trigger('impactLight', { enableVibrateFallback: true });
+    } catch (_) {}
+
+    const idNum = Number(barberId);
+    setFavoriteIds(prev => {
+      const next = new Set(prev);
+      if (next.has(idNum)) {
+        next.delete(idNum);
+      } else {
+        next.add(idNum);
+      }
+      return next;
+    });
+
+    try {
+      await apiClient.toggleFavorite(token, idNum);
+      loadFavorites();
+    } catch (_err) {
+      loadFavorites();
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       if (!token) return;
       loadCustomerBookings();
       loadDispatch(false);
-    }, [token, loadDispatch, loadCustomerBookings])
+      loadFavorites();
+      loadLoyalty();
+    }, [token, loadDispatch, loadCustomerBookings, loadFavorites, loadLoyalty])
   );
 
   // Auto-refresh barbers list when service filter changes
@@ -200,10 +261,13 @@ export default function CustomerHomeScreen({ navigation }) {
     const socket = connectSocket(token);
     const onStatusUpdate = () => {
       loadCustomerBookings();
+      loadLoyalty();
     };
     const onConnect = () => {
       loadCustomerBookings();
       loadDispatch(true);
+      loadFavorites();
+      loadLoyalty();
     };
     const onAvailabilityUpdated = () => loadDispatch(true);
     socket.on('booking-status-updated', onStatusUpdate);
@@ -362,18 +426,76 @@ export default function CustomerHomeScreen({ navigation }) {
         </View>
       ) : null}
 
-      <Text style={styles.sectionLabel}>Service</Text>
+      {/* Feature 4: Digital Loyalty "Cut Club" Stamp Card */}
+      {loyalty ? (
+        <View style={styles.loyaltyCard}>
+          <View style={styles.loyaltyHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.loyaltyEyebrow}>TRIMRIDE VIP CUT CLUB</Text>
+              <Text style={styles.loyaltyTitle}>✂️ Digital Loyalty Stamp Card</Text>
+            </View>
+            <View style={styles.cycleBadge}>
+              <Text style={styles.cycleBadgeText}>Round #{Number(loyalty.completedCycles || 0) + 1}</Text>
+            </View>
+          </View>
+
+          {/* 5 Stamp Circles */}
+          <View style={styles.punchTrack}>
+            {[1, 2, 3, 4, 5].map((index) => {
+              const isStamped = loyalty.rewardAvailable ? true : index <= Number(loyalty.punchesInCurrentCycle || 0);
+              const isRewardSlot = index === 5;
+              return (
+                <View key={index} style={styles.punchSlotWrap}>
+                  <View
+                    style={[
+                      styles.punchSlot,
+                      isStamped && styles.punchSlotStamped,
+                      isRewardSlot && !isStamped && styles.punchSlotRewardTarget,
+                      isRewardSlot && isStamped && styles.punchSlotRewardUnlocked,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.punchSlotText,
+                        isStamped && styles.punchSlotTextStamped,
+                      ]}
+                    >
+                      {isStamped ? (isRewardSlot ? '🎁' : '✂️') : (isRewardSlot ? '★' : `${index}`)}
+                    </Text>
+                  </View>
+                  <Text style={styles.punchSlotLabel}>
+                    {isRewardSlot ? '20% OFF' : `Cut ${index}`}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Reward Alert Banner */}
+          <View style={[styles.rewardBanner, loyalty.rewardAvailable ? styles.rewardUnlockedBanner : styles.rewardProgressBanner]}>
+            <Text style={[styles.rewardBannerText, loyalty.rewardAvailable ? styles.rewardUnlockedText : styles.rewardProgressText]}>
+              {loyalty.rewardAvailable
+                ? '🎉 20% OFF REWARD UNLOCKED! Show this to your barber during your cut.'
+                : `${loyalty.cutsUntilReward} more cut${loyalty.cutsUntilReward === 1 ? '' : 's'} until 20% OFF your next trim!`}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
+      <Text style={styles.sectionLabel}>Service & Filters</Text>
       <View style={styles.actionsRow}>
         {serviceFilters.map(filter => (
           <TouchableOpacity
-            key={filter}
-            style={[styles.ghostButton, selectedService === filter && styles.activeFilter]}
+            key={filter.key}
+            style={[styles.ghostButton, selectedService === filter.key && styles.activeFilter]}
             onPress={() => {
               ReactNativeHapticFeedback.trigger('impactLight', { enableVibrateFallback: true });
-              setSelectedService(filter);
+              setSelectedService(filter.key);
             }}
           >
-            <Text style={[styles.ghostText, selectedService === filter && styles.activeFilterText]}>{filter.charAt(0).toUpperCase() + filter.slice(1)}</Text>
+            <Text style={[styles.ghostText, selectedService === filter.key && styles.activeFilterText]}>
+              {filter.label}
+            </Text>
           </TouchableOpacity>
         ))}
         <TouchableOpacity style={styles.ghostButton} onPress={() => loadDispatch(true)}>
@@ -399,22 +521,35 @@ export default function CustomerHomeScreen({ navigation }) {
 
       {featuredBarber ? (
         <>
-            <Text style={styles.sectionLabel}>Best available match</Text>
+            <Text style={styles.sectionLabel}>
+              {selectedService === 'regulars' ? 'Top Regular Barber' : 'Best available match'}
+            </Text>
           <TouchableOpacity
             style={styles.featuredCard}
-            onPress={() => navigation.navigate('RequestBarber', { barber: featuredBarber, serviceType: selectedService })}
+            onPress={() => navigation.navigate('RequestBarber', { barber: featuredBarber, serviceType: selectedService === 'regulars' ? 'fade' : selectedService })}
           >
             <View style={styles.featuredHeader}>
               <View style={styles.featuredCopy}>
                 <Text style={styles.featuredTitle}>{featuredBarber.name}</Text>
                 <Text style={styles.featuredSubtitle}>
-                  {featuredBarber.hasServiceMatch ? `Available for ${selectedService}` : 'Online; requested service not listed'}
+                  {selectedService === 'regulars' ? '❤️ Saved Regular Barber' : featuredBarber.hasServiceMatch ? `Available for ${selectedService}` : 'Online; requested service not listed'}
                 </Text>
               </View>
-              <View style={styles.featuredBadge}>
-                <Text style={styles.featuredBadgeText}>
-                  {Number.isFinite(featuredBarber.distanceKm) ? `${featuredBarber.distanceKm.toFixed(1)} km away` : 'Distance unavailable'}
-                </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={styles.featuredBadge}>
+                  <Text style={styles.featuredBadgeText}>
+                    {Number.isFinite(featuredBarber.distanceKm) ? `${featuredBarber.distanceKm.toFixed(1)} km away` : 'Distance unavailable'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.heartButton}
+                  onPress={() => toggleFavorite(Number(featuredBarber.barberId || featuredBarber.id))}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <Text style={styles.heartIcon}>
+                    {favoriteIds.has(Number(featuredBarber.barberId || featuredBarber.id)) ? '❤️' : '🤍'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
             <View style={styles.metricRow}>
@@ -435,7 +570,11 @@ export default function CustomerHomeScreen({ navigation }) {
         </>
       ) : null}
 
-      {remainingBarbers.length > 0 ? <Text style={styles.sectionLabel}>More nearby options</Text> : null}
+      {remainingBarbers.length > 0 ? (
+        <Text style={styles.sectionLabel}>
+          {selectedService === 'regulars' ? 'More Regular Barbers' : 'More nearby options'}
+        </Text>
+      ) : null}
     </>
   );
 
@@ -502,18 +641,29 @@ export default function CustomerHomeScreen({ navigation }) {
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.card}
-              onPress={() => navigation.navigate('RequestBarber', { barber: item, serviceType: selectedService })}
+              onPress={() => navigation.navigate('RequestBarber', { barber: item, serviceType: selectedService === 'regulars' ? 'fade' : selectedService })}
             >
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
-                <View style={styles.cardEtaBadge}>
-                  <Text style={styles.cardEta}>
-                    {Number.isFinite(item.distanceKm) ? `${item.distanceKm.toFixed(1)} km away` : 'Distance unavailable'}
-                  </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={styles.cardEtaBadge}>
+                    <Text style={styles.cardEta}>
+                      {Number.isFinite(item.distanceKm) ? `${item.distanceKm.toFixed(1)} km away` : 'Distance unavailable'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.heartButton}
+                    onPress={() => toggleFavorite(Number(item.barberId || item.id))}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <Text style={styles.heartIcon}>
+                      {favoriteIds.has(Number(item.barberId || item.id)) ? '❤️' : '🤍'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
               <Text style={styles.cardSubcopy}>
-                {item.hasServiceMatch ? `Available for ${selectedService}` : 'Online; requested service not listed'}
+                {selectedService === 'regulars' ? '❤️ Saved Regular Barber' : item.hasServiceMatch ? `Available for ${selectedService}` : 'Online; requested service not listed'}
               </Text>
               <View style={styles.cardMetaRow}>
                 <Text style={[styles.cardMetaPill, styles.ratingPill]}>★ {item.rating}</Text>
@@ -524,10 +674,29 @@ export default function CustomerHomeScreen({ navigation }) {
           )}
           ListEmptyComponent={!loading && !featuredBarber ? (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No online barbers found for {selectedService}</Text>
-              <Text style={styles.emptyBody}>Try refreshing or switching the service filter.</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={() => loadDispatch(true)}>
-                <Text style={styles.retryButtonText}>Try Again</Text>
+              <Text style={styles.emptyTitle}>
+                {selectedService === 'regulars'
+                  ? 'No Regular Barbers saved yet'
+                  : `No online barbers found for ${selectedService}`}
+              </Text>
+              <Text style={styles.emptyBody}>
+                {selectedService === 'regulars'
+                  ? 'Tap the ❤️ on any barber card to save them to your Regulars for 1-tap fast booking.'
+                  : 'Try refreshing or switching the service filter.'}
+              </Text>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={() => {
+                  if (selectedService === 'regulars') {
+                    setSelectedService('fade');
+                  } else {
+                    loadDispatch(true);
+                  }
+                }}
+              >
+                <Text style={styles.retryButtonText}>
+                  {selectedService === 'regulars' ? 'Browse All Barbers' : 'Try Again'}
+                </Text>
               </TouchableOpacity>
             </View>
           ) : null}
@@ -942,5 +1111,133 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 13,
     fontWeight: '700',
+  },
+  heartButton: {
+    padding: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heartIcon: {
+    fontSize: 18,
+  },
+  loyaltyCard: {
+    backgroundColor: '#0F172A',
+    borderRadius: 20,
+    padding: spacing.md,
+    marginBottom: 14,
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  loyaltyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: spacing.md,
+  },
+  loyaltyEyebrow: {
+    color: '#F59E0B',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  loyaltyTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  cycleBadge: {
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  cycleBadgeText: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  punchTrack: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  punchSlotWrap: {
+    alignItems: 'center',
+  },
+  punchSlot: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#1E293B',
+    borderWidth: 1.5,
+    borderColor: '#475569',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  punchSlotStamped: {
+    backgroundColor: '#F59E0B',
+    borderColor: '#D97706',
+    borderStyle: 'solid',
+  },
+  punchSlotRewardTarget: {
+    borderColor: '#10B981',
+    borderWidth: 2,
+  },
+  punchSlotRewardUnlocked: {
+    backgroundColor: '#10B981',
+    borderColor: '#059669',
+    borderStyle: 'solid',
+  },
+  punchSlotText: {
+    color: '#64748B',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  punchSlotTextStamped: {
+    color: '#FFFFFF',
+    fontSize: 18,
+  },
+  punchSlotLabel: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  rewardBanner: {
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  rewardProgressBanner: {
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  rewardUnlockedBanner: {
+    backgroundColor: '#064E3B',
+    borderWidth: 1,
+    borderColor: '#10B981',
+  },
+  rewardBannerText: {
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  rewardProgressText: {
+    color: '#FDE68A',
+  },
+  rewardUnlockedText: {
+    color: '#A7F3D0',
   },
 });

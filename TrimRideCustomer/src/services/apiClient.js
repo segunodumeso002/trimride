@@ -258,4 +258,54 @@ export const apiClient = {
       body: JSON.stringify(payload),
     });
   },
+
+  uploadStylePhoto(token, photoUri, fileName = 'reference.jpg') {
+    const formData = new FormData();
+    formData.append('photo', {
+      uri: photoUri,
+      type: 'image/jpeg',
+      name: fileName,
+    });
+
+    return fetch(`${API_BASE_URL}/customers/upload-style-photo`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    }).then(async res => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to upload photo');
+      return data;
+    });
+  },
+
+  getFavorites(token) {
+    return request('/customers/favorites', {
+      headers: authHeader(token),
+    });
+  },
+
+  toggleFavorite(token, barberId) {
+    return request('/customers/favorites/toggle', {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify({ barberId }),
+    });
+  },
+
+  getLoyalty(token) {
+    return request('/customers/loyalty', {
+      headers: authHeader(token),
+    });
+  },
+
+  startServiceWithPin(token, bookingId, pin) {
+    return request(`/bookings/${bookingId}/start-service`, {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify({ pin }),
+    });
+  },
 };

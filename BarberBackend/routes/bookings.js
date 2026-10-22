@@ -187,7 +187,7 @@ router.post('/cancel/:bookingId', requireAuth, handleCancelBooking);
 router.post('/:bookingId/cancel', requireAuth, handleCancelBooking);
 router.post('/cancel', requireAuth, handleCancelBooking);
 
-// Get authenticated barber current active/in-progress booking (confirmed)
+// Get authenticated barber current active/in-progress booking (confirmed or in_progress)
 router.get('/my-active', requireAuth, async (req, res) => {
   try {
     const barberProfileId = await resolveBarberProfileId(req.userId);
@@ -198,12 +198,13 @@ router.get('/my-active', requireAuth, async (req, res) => {
     const result = await pool.query(
       `
       SELECT b.id, b.status, b.queue_position, b.created_at, b.total_amount,
+             b.reference_photo, b.notes, b.verification_pin,
              u.id AS customer_user_id, u.first_name, u.last_name, u.phone, u.address AS customer_address,
              s.name AS service_name, s.price AS service_price
       FROM bookings b
       JOIN users u ON b.customer_id = u.id
       LEFT JOIN services s ON b.service_id = s.id
-      WHERE b.barber_id = $1 AND b.status = 'confirmed'
+      WHERE b.barber_id = $1 AND b.status IN ('confirmed', 'in_progress')
       ORDER BY b.created_at ASC
       LIMIT 1
       `,
@@ -227,6 +228,7 @@ router.get('/my-requests', requireAuth, async (req, res) => {
     const result = await pool.query(
       `
       SELECT b.id, b.status, b.queue_position, b.created_at, b.total_amount,
+             b.reference_photo, b.notes, b.verification_pin,
              u.first_name, u.last_name,
              s.name AS service_name, s.price AS service_price
       FROM bookings b
@@ -243,6 +245,78 @@ router.get('/my-requests', requireAuth, async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 });
+
+// Start service (verifying 4-digit PIN)
+const handleStartService = async (req, res) => {
+  const bookingId = req.params.bookingId || req.body?.bookingId;
+  const pin = req.body?.pin;
+
+  try {
+    const barberProfileId = await resolveBarberProfileId(req.userId);
+    if (!barberProfileId) {
+      return res.status(403).json({ error: 'Barber profile not found' });
+    }
+
+    const bookingResult = await pool.query(
+      'SELECT id, customer_id, barber_id, status, verification_pin FROM bookings WHERE id = $1',
+      [bookingId]
+    );
+
+    if (bookingResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const booking = bookingResult.rows[0];
+
+    if (booking.barber_id !== barberProfileId) {
+      return res.status(403).json({ error: 'Not authorized for this booking' });
+    }
+
+    if (booking.status !== 'confirmed') {
+      return res.status(400).json({ error: `Cannot start service for booking in ${booking.status} state` });
+    }
+
+    if (booking.verification_pin && pin) {
+      if (String(booking.verification_pin).trim() !== String(pin).trim()) {
+        return res.status(400).json({ error: 'Incorrect 4-digit PIN. Please ask client for the code on their screen.' });
+      }
+    }
+
+    const updated = await pool.query(
+      `UPDATE bookings SET status = 'in_progress', actual_start_time = NOW() WHERE id = $1 RETURNING *`,
+      [bookingId]
+    );
+
+    const io = req.app.get('io');
+    if (io) {
+      const payload = {
+        bookingId: Number(bookingId),
+        status: 'in_progress',
+        byBarber: true,
+      };
+      io.to(`booking-${bookingId}`).emit('booking-status-updated', payload);
+      io.to(`user-${booking.customer_id}`).emit('booking-status-updated', payload);
+    }
+
+    sendPushToUser(booking.customer_id, {
+      title: 'Service in progress 💈',
+      body: 'Your barber has verified your PIN and started your cut!',
+      data: {
+        type: 'booking_status_updated',
+        bookingId: Number(bookingId),
+        status: 'in_progress',
+      },
+    }).catch(() => {});
+
+    return res.json({ success: true, bookingId: Number(bookingId), status: 'in_progress', booking: updated.rows[0] });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+router.post('/start-service/:bookingId', requireAuth, handleStartService);
+router.post('/:bookingId/start-service', requireAuth, handleStartService);
+router.post('/start-service', requireAuth, handleStartService);
 
 // Barber accepts or declines incoming request.
 router.post('/:bookingId/respond', requireAuth, async (req, res) => {

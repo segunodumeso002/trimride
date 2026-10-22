@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Vibration, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
+import { Alert, AppState, Vibration, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, RefreshControl, Modal, TextInput, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import SoundPlayer from 'react-native-sound-player';
 import { colors, spacing } from '../../theme/tokens';
 import { useAppMode } from '../../context/AppModeContext';
 import { apiClient } from '../../services/apiClient';
 import { connectSocket } from '../../services/socketClient';
+import { runtimeConfig } from '../../config/runtimeConfig';
 import IncomingBookingModal from '../../components/IncomingBookingModal';
 import { RequestListSkeleton } from '../../components/skeletons/RequestListSkeleton';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
@@ -22,6 +23,9 @@ export default function BarberHubScreen({ navigation }) {
   const [refreshingRequests, setRefreshingRequests] = useState(false);
   const [newRequestAlert, setNewRequestAlert] = useState(false);
   const [incomingRequest, setIncomingRequest] = useState(null);
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [inputPin, setInputPin] = useState('');
+  const [verifyingPin, setVerifyingPin] = useState(false);
   const { signOut, token, user } = useAppMode();
   const appStateRef = useRef(AppState.currentState);
 
@@ -105,6 +109,9 @@ export default function BarberHubScreen({ navigation }) {
         service: item.service_name || 'General Grooming',
         eta: `Queue #${item.queue_position || '-'}`,
         price: (item.total_amount || item.service_price) ? `$${item.total_amount || item.service_price}` : '$25.00',
+        referencePhoto: item.reference_photo,
+        notes: item.notes,
+        verificationPin: item.verification_pin,
       }));
       setRequests(normalized);
     } catch (_error) {
@@ -174,6 +181,9 @@ export default function BarberHubScreen({ navigation }) {
             service: latest.service_name || 'General Grooming',
             eta: `Queue #${latest.queue_position || '-'}`,
             price: (latest.total_amount || latest.service_price) ? `$${latest.total_amount || latest.service_price}` : '$25.00',
+            referencePhoto: latest.reference_photo,
+            notes: latest.notes,
+            verificationPin: latest.verification_pin,
             distance: '1.8 km away',
             travelTime: '~6 min travel',
           };
@@ -243,6 +253,29 @@ export default function BarberHubScreen({ navigation }) {
     } catch (err) {
       Alert.alert('Error', err.message);
       loadOnlineStatus();
+    }
+  };
+
+  const handleVerifyPinAndStart = async () => {
+    if (!token || !activeBooking?.id) return;
+    if (!inputPin || inputPin.trim().length !== 4) {
+      Alert.alert('Invalid PIN', 'Please enter the 4-digit PIN provided by your client.');
+      return;
+    }
+
+    setVerifyingPin(true);
+    try {
+      await apiClient.startServiceWithPin(token, activeBooking.id, inputPin.trim());
+      ReactNativeHapticFeedback.trigger('notificationSuccess', { enableVibrateFallback: true });
+      setPinModalVisible(false);
+      setInputPin('');
+      Alert.alert('Service Started! 💈', 'PIN verified successfully. The cut is now officially in progress.');
+      await loadActiveBooking();
+    } catch (err) {
+      ReactNativeHapticFeedback.trigger('notificationError', { enableVibrateFallback: true });
+      Alert.alert('PIN Verification Failed', err.message || 'Incorrect PIN. Please re-check with client.');
+    } finally {
+      setVerifyingPin(false);
     }
   };
 
@@ -358,6 +391,47 @@ export default function BarberHubScreen({ navigation }) {
         }}
         countdownSeconds={50}
       />
+
+      {/* 4-Digit Service Verification PIN Modal */}
+      <Modal visible={pinModalVisible} transparent animationType="fade">
+        <View style={styles.pinModalOverlay}>
+          <View style={styles.pinModalContainer}>
+            <Text style={styles.pinModalIcon}>🔐</Text>
+            <Text style={styles.pinModalTitle}>Verify Customer PIN</Text>
+            <Text style={styles.pinModalSubtitle}>
+              Ask {activeBooking?.first_name || 'the client'} for the 4-digit security PIN shown on their TrimRide tracking screen:
+            </Text>
+            <TextInput
+              style={styles.pinModalInput}
+              placeholder="0000"
+              placeholderTextColor="#94A3B8"
+              keyboardType="number-pad"
+              maxLength={4}
+              value={inputPin}
+              onChangeText={setInputPin}
+              autoFocus
+            />
+            <TouchableOpacity
+              style={[styles.pinModalConfirmButton, verifyingPin && { opacity: 0.7 }]}
+              onPress={handleVerifyPinAndStart}
+              disabled={verifyingPin}
+            >
+              {verifyingPin ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <Text style={styles.pinModalConfirmText}>Verify & Start Cut ✂️</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.pinModalCancelButton}
+              onPress={() => setPinModalVisible(false)}
+            >
+              <Text style={styles.pinModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -500,8 +574,10 @@ export default function BarberHubScreen({ navigation }) {
       {activeBooking && (
         <View style={styles.activeBookingCard}>
           <View style={styles.activeBadgeRow}>
-            <View style={styles.liveDot} />
-            <Text style={styles.activeEyebrow}>ACTIVE IN-CHAIR SESSION</Text>
+            <View style={[styles.liveDot, activeBooking.status === 'in_progress' ? styles.inProgressDot : styles.confirmedDot]} />
+            <Text style={styles.activeEyebrow}>
+              {activeBooking.status === 'in_progress' ? '✂️ SERVICE IN PROGRESS' : 'ACTIVE BOOKING • AWAITING PIN'}
+            </Text>
             <Text style={styles.activeId}>#{activeBooking.id}</Text>
           </View>
           <Text style={styles.activeCustomerName}>
@@ -517,18 +593,49 @@ export default function BarberHubScreen({ navigation }) {
             <Text style={styles.activeMeta}>📍 {activeBooking.customer_address}</Text>
           ) : null}
 
+          {(activeBooking.reference_photo || activeBooking.notes) && (
+            <View style={styles.activeStyleBox}>
+              {activeBooking.reference_photo ? (
+                <Image
+                  source={{
+                    uri: activeBooking.reference_photo.startsWith('http')
+                      ? activeBooking.reference_photo
+                      : `${runtimeConfig.socketBaseUrl}${activeBooking.reference_photo}`,
+                  }}
+                  style={styles.activeStylePhoto}
+                />
+              ) : null}
+              <View style={{ flex: 1, paddingLeft: activeBooking.reference_photo ? 10 : 0 }}>
+                <Text style={styles.activeStyleLabel}>✂️ Client Style & Instructions:</Text>
+                <Text style={styles.activeStyleNotes}>{activeBooking.notes || 'Reference Photo Attached'}</Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.activeActionsRow}>
-            <TouchableOpacity
-              style={[styles.completeButton, completingBooking && styles.completeButtonDisabled]}
-              onPress={() => handleCompleteBooking(activeBooking.id)}
-              disabled={completingBooking}
-            >
-              {completingBooking ? (
-                <ActivityIndicator color="#FFF" size="small" />
-              ) : (
-                <Text style={styles.completeButtonText}>✓ Finish Cut & Complete</Text>
-              )}
-            </TouchableOpacity>
+            {activeBooking.status === 'confirmed' ? (
+              <TouchableOpacity
+                style={styles.startWithPinButton}
+                onPress={() => {
+                  setInputPin('');
+                  setPinModalVisible(true);
+                }}
+              >
+                <Text style={styles.startWithPinButtonText}>🔑 Enter PIN to Start Cut</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.completeButton, completingBooking && styles.completeButtonDisabled]}
+                onPress={() => handleCompleteBooking(activeBooking.id)}
+                disabled={completingBooking}
+              >
+                {completingBooking ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <Text style={styles.completeButtonText}>✓ Finish Cut & Complete</Text>
+                )}
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.activeChatButton}
               onPress={() => {
@@ -572,6 +679,23 @@ export default function BarberHubScreen({ navigation }) {
                   <Text style={styles.queueBadge}>{item.eta}</Text>
                 </View>
                 <Text style={styles.meta}>{item.service}</Text>
+                {(item.referencePhoto || item.notes) && (
+                  <View style={styles.itemStyleBox}>
+                    {item.referencePhoto ? (
+                      <Image
+                        source={{
+                          uri: item.referencePhoto.startsWith('http')
+                            ? item.referencePhoto
+                            : `${runtimeConfig.socketBaseUrl}${item.referencePhoto}`,
+                        }}
+                        style={styles.itemStyleThumb}
+                      />
+                    ) : null}
+                    <Text style={styles.itemStyleNotes} numberOfLines={2}>
+                      ✂️ {item.notes || 'Reference Photo Attached'}
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.responseRow}>
                   <TouchableOpacity
                     style={[styles.responseButton, styles.acceptButton]}
@@ -902,5 +1026,147 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 14,
+  },
+  inProgressDot: {
+    backgroundColor: '#10B981',
+  },
+  confirmedDot: {
+    backgroundColor: '#F59E0B',
+  },
+  activeStyleBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1C1C1C',
+    borderRadius: 12,
+    padding: 10,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  activeStylePhoto: {
+    width: 54,
+    height: 54,
+    borderRadius: 8,
+    backgroundColor: '#333',
+  },
+  activeStyleLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.accent,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  activeStyleNotes: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.white,
+    marginTop: 2,
+  },
+  startWithPinButton: {
+    flex: 2,
+    backgroundColor: colors.accent,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  startWithPinButtonText: {
+    color: colors.charcoal,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  pinModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  pinModalContainer: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#1C1C1C',
+    borderRadius: 24,
+    padding: spacing.xl,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#38BDF8',
+  },
+  pinModalIcon: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  pinModalTitle: {
+    color: colors.white,
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  pinModalSubtitle: {
+    color: '#94A3B8',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+    lineHeight: 18,
+  },
+  pinModalInput: {
+    width: '80%',
+    height: 60,
+    backgroundColor: '#0F172A',
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#38BDF8',
+    color: '#F8FAFC',
+    fontSize: 32,
+    fontWeight: '900',
+    textAlign: 'center',
+    letterSpacing: 8,
+    marginBottom: spacing.lg,
+  },
+  pinModalConfirmButton: {
+    width: '100%',
+    backgroundColor: '#10B981',
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  pinModalConfirmText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  pinModalCancelButton: {
+    width: '100%',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  pinModalCancelText: {
+    color: colors.steel,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  itemStyleBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 6,
+    marginVertical: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  itemStyleThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: 6,
+    backgroundColor: '#E2E8F0',
+    marginRight: 8,
+  },
+  itemStyleNotes: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.charcoal,
+    fontWeight: '600',
   },
 });

@@ -260,4 +260,12 @@ export const apiClient = {
   getActiveHotzones() {
     return request('/barbers/hotzones/active');
   },
+
+  startServiceWithPin(token, bookingId, pin) {
+    return request(`/bookings/${bookingId}/start-service`, {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify({ pin }),
+    });
+  },
 };
