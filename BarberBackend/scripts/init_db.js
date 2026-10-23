@@ -27,6 +27,21 @@ async function initDb() {
       ADD COLUMN IF NOT EXISTS city VARCHAR(100),
       ADD COLUMN IF NOT EXISTS state VARCHAR(100),
       ADD COLUMN IF NOT EXISTS country VARCHAR(100);
+
+      ALTER TABLE bookings
+      ADD COLUMN IF NOT EXISTS reference_photo VARCHAR(500),
+      ADD COLUMN IF NOT EXISTS notes TEXT,
+      ADD COLUMN IF NOT EXISTS verification_pin VARCHAR(6);
+
+      CREATE TABLE IF NOT EXISTS favorite_barbers (
+        id SERIAL PRIMARY KEY,
+        customer_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        barber_id INTEGER REFERENCES barber_profiles(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(customer_id, barber_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_favorite_barbers_customer ON favorite_barbers(customer_id);
     `);
     
     console.log('Database initialized successfully.');

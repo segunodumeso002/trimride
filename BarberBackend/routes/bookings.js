@@ -276,8 +276,8 @@ const handleStartService = async (req, res) => {
       return res.status(400).json({ error: `Cannot start service for booking in ${booking.status} state` });
     }
 
-    if (booking.verification_pin && pin) {
-      if (String(booking.verification_pin).trim() !== String(pin).trim()) {
+    if (booking.verification_pin) {
+      if (!pin || String(booking.verification_pin).trim() !== String(pin).trim()) {
         return res.status(400).json({ error: 'Incorrect 4-digit PIN. Please ask client for the code on their screen.' });
       }
     }

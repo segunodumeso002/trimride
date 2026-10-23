@@ -70,7 +70,19 @@ CREATE TABLE bookings (
     total_amount DECIMAL(10, 2),
     payment_status VARCHAR(20) DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'refunded')),
     payment_method VARCHAR(20) CHECK (payment_method IN ('card', 'cash')),
+    reference_photo VARCHAR(500),
+    notes TEXT,
+    verification_pin VARCHAR(6),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Favorite barbers for 1-tap fast booking
+CREATE TABLE favorite_barbers (
+    id SERIAL PRIMARY KEY,
+    customer_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    barber_id INTEGER REFERENCES barber_profiles(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(customer_id, barber_id)
 );
 
 -- Reviews and ratings
@@ -103,4 +115,5 @@ CREATE TABLE payments (
 CREATE INDEX idx_barber_location ON barber_profiles(latitude, longitude);
 CREATE INDEX idx_bookings_status ON bookings(status);
 CREATE INDEX idx_bookings_barber_date ON bookings(barber_id, created_at);
+CREATE INDEX idx_favorite_barbers_customer ON favorite_barbers(customer_id);
 CREATE INDEX idx_users_email ON users(email);
