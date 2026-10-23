@@ -59,6 +59,7 @@ export function AppModeProvider({ children, defaultRole }) {
             ...parsed.user,
             ...nextUser,
             country: nextUser.country || parsed.user?.country || '',
+            phone: nextUser.phone || parsed.user?.phone || '',
           };
 
           setToken(parsed.token);
@@ -67,6 +68,13 @@ export function AppModeProvider({ children, defaultRole }) {
           setIsSignedIn(true);
           setIsFirstLoginSession(false);
           attachSocketListeners(parsed.token, mergedUser.userType);
+
+          // Persist refreshed user details back to session storage
+          await AsyncStorage.setItem(
+            SESSION_KEY,
+            JSON.stringify({ token: parsed.token, user: mergedUser })
+          );
+
           if (ENABLE_FCM) {
             // Re-register FCM token on session restore
             const fcmToken = await fcmService.getFCMToken();
@@ -127,6 +135,8 @@ export function AppModeProvider({ children, defaultRole }) {
     const normalizedUser = {
       ...nextUser,
       userType: nextUser.userType || nextUser.user_type,
+      country: nextUser.country || '',
+      phone: nextUser.phone || '',
     };
 
     setToken(nextToken);

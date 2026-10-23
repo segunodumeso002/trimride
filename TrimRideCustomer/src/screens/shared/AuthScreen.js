@@ -90,9 +90,18 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       const payload = await apiClient.login(email.trim(), password);
+      let userObj = payload.user || {};
+      if (!userObj.country || !userObj.phone) {
+        try {
+          const meRes = await apiClient.getMe(payload.token);
+          if (meRes?.user) {
+            userObj = { ...userObj, ...meRes.user };
+          }
+        } catch (_) {}
+      }
       await establishSession({
         token: payload.token,
-        user: payload.user,
+        user: userObj,
         isFirstLogin: true,
       });
     } catch (error) {

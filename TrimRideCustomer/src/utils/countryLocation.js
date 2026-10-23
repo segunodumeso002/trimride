@@ -1,4 +1,4 @@
-import Country from 'country-state-city/lib/cjs/country';
+import { Country } from 'country-state-city';
 import parsePhoneNumberFromString from 'libphonenumber-js/max';
 
 // Known representative center coordinates and delta for common regions
@@ -22,19 +22,33 @@ export function resolveCountryCode(countryNameOrCode, phone) {
   if (countryNameOrCode && typeof countryNameOrCode === 'string') {
     const trimmed = countryNameOrCode.trim();
     const upper = trimmed.toUpperCase();
-    if (upper === 'USA' || upper === 'UNITED STATES OF AMERICA') return 'US';
-    if (upper === 'UK' || upper === 'GREAT BRITAIN') return 'GB';
+    if (upper === 'USA' || upper === 'UNITED STATES OF AMERICA' || upper === 'UNITED STATES') return 'US';
+    if (upper === 'UK' || upper === 'GREAT BRITAIN' || upper === 'UNITED KINGDOM') return 'GB';
+    if (upper === 'GHANA') return 'GH';
+    if (upper === 'NIGERIA') return 'NG';
+    if (upper === 'SOUTH AFRICA') return 'ZA';
+    if (upper === 'KENYA') return 'KE';
+    if (upper === 'ZIMBABWE') return 'ZW';
+    if (upper === 'BOTSWANA') return 'BW';
+    if (upper === 'NAMIBIA') return 'NA';
+    if (upper === 'CANADA') return 'CA';
+    if (upper === 'AUSTRALIA') return 'AU';
 
     if (trimmed.length === 2) {
       return upper;
     }
 
-    const match = Country.getAllCountries().find(
-      c => c.name.toLowerCase() === trimmed.toLowerCase()
-    );
-    if (match?.isoCode) {
-      return match.isoCode;
-    }
+    try {
+      const allCountries = (typeof Country?.getAllCountries === 'function')
+        ? Country.getAllCountries()
+        : [];
+      const match = allCountries.find(
+        c => c.name.toLowerCase() === trimmed.toLowerCase()
+      );
+      if (match?.isoCode) {
+        return match.isoCode;
+      }
+    } catch (_) {}
   }
 
   if (phone && typeof phone === 'string') {
@@ -57,18 +71,22 @@ export function getCountryCoordinates(countryNameOrCode, phone) {
   }
 
   if (isoCode) {
-    const country = Country.getCountryByCode(isoCode);
-    if (country && country.latitude && country.longitude) {
-      return {
-        latitude: Number(country.latitude),
-        longitude: Number(country.longitude),
-        latitudeDelta: 6.0,
-        longitudeDelta: 6.0,
-        name: country.name,
-        flag: country.flag || '',
-        isoCode,
-      };
-    }
+    try {
+      const country = (typeof Country?.getCountryByCode === 'function')
+        ? Country.getCountryByCode(isoCode)
+        : null;
+      if (country && country.latitude && country.longitude) {
+        return {
+          latitude: Number(country.latitude),
+          longitude: Number(country.longitude),
+          latitudeDelta: 6.0,
+          longitudeDelta: 6.0,
+          name: country.name,
+          flag: country.flag || '',
+          isoCode,
+        };
+      }
+    } catch (_) {}
   }
 
   return { ...DEFAULT_SOUTH_AFRICA, isoCode: 'ZA' };

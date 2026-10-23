@@ -81,39 +81,34 @@ export default function CustomerHomeScreen({ navigation }) {
     }
   }), [userCountryCoords]);
 
-  // On first login on a user (both new or old), center default map view on registration country
+  // Always center default map view on registration country when loading or user country resolves
+  const hasAnimatedToCountry = useRef(false);
+
   useEffect(() => {
-    if (!user?.id) return;
+    if (!userCountryCoords?.latitude) return;
 
     let isMounted = true;
-    const applyRegistrationCountryMapLocation = async () => {
-      try {
-        const key = `@trimride_first_login_map_centered_${user.id}`;
-        const alreadyCentered = await AsyncStorage.getItem(key);
-
-        if (!alreadyCentered || isFirstLoginSession) {
-          if (mapRef.current && isMounted) {
-            mapRef.current.animateToRegion({
-              latitude: userCountryCoords.latitude,
-              longitude: userCountryCoords.longitude,
-              latitudeDelta: userCountryCoords.latitudeDelta,
-              longitudeDelta: userCountryCoords.longitudeDelta,
-            }, 1000);
-          }
-          await AsyncStorage.setItem(key, 'true');
-          if (isFirstLoginSession && consumeFirstLoginSession) {
-            consumeFirstLoginSession();
-          }
-        }
-      } catch (_e) {}
+    const centerOnCountry = () => {
+      if (mapRef.current && isMounted && !activeBooking) {
+        mapRef.current.animateToRegion({
+          latitude: userCountryCoords.latitude,
+          longitude: userCountryCoords.longitude,
+          latitudeDelta: userCountryCoords.latitudeDelta,
+          longitudeDelta: userCountryCoords.longitudeDelta,
+        }, 800);
+        hasAnimatedToCountry.current = true;
+      }
+      if (isFirstLoginSession && consumeFirstLoginSession) {
+        consumeFirstLoginSession();
+      }
     };
 
-    const timer = setTimeout(applyRegistrationCountryMapLocation, 500);
+    const timer = setTimeout(centerOnCountry, 400);
     return () => {
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [user?.id, userCountryCoords, isFirstLoginSession, consumeFirstLoginSession]);
+  }, [userCountryCoords.latitude, userCountryCoords.longitude, userCountryCoords.isoCode, isFirstLoginSession, activeBooking, consumeFirstLoginSession]);
 
   const loadDispatch = useCallback(async (refreshMode = false) => {
     if (refreshMode) {
@@ -135,15 +130,25 @@ export default function CustomerHomeScreen({ navigation }) {
         user?.id || null
       );
 
-      // Emulator GPS is often far from demo barbers; fallback keeps live demos reliable.
+      // In DEV, try user's country radius first, then demo coords if still empty
       if ((!Array.isArray(data) || data.length === 0) && __DEV__) {
         data = await apiClient.getDispatchBarbers(
-          DEMO_COORDS.latitude,
-          DEMO_COORDS.longitude,
-          8,
+          userCountryCoords.latitude,
+          userCountryCoords.longitude,
+          150,
           serviceQuery,
           user?.id || null
         );
+
+        if (!Array.isArray(data) || data.length === 0) {
+          data = await apiClient.getDispatchBarbers(
+            DEMO_COORDS.latitude,
+            DEMO_COORDS.longitude,
+            8,
+            serviceQuery,
+            user?.id || null
+          );
+        }
       }
 
       const normalized = data.map(item => {
@@ -582,6 +587,7 @@ export default function CustomerHomeScreen({ navigation }) {
     <View style={styles.container}>
       <MapView
         ref={mapRef}
+        key={`map_${userCountryCoords.isoCode}`}
         style={StyleSheet.absoluteFillObject}
         provider={PROVIDER_GOOGLE}
         initialRegion={{
