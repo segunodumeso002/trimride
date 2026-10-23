@@ -23,6 +23,7 @@ export default function RequestBarberScreen({ route, navigation }) {
   const [queueLoading, setQueueLoading] = useState(true);
   const [waitingClients, setWaitingClients] = useState(Number(barber?.queue || 0));
   const [selectedPreset, setSelectedPreset] = useState('');
+  const [styleOptionsExpanded, setStyleOptionsExpanded] = useState(false);
   const [notes, setNotes] = useState('');
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -83,6 +84,13 @@ export default function RequestBarberScreen({ route, navigation }) {
 
   const handleRemovePhoto = () => {
     setSelectedPhoto(null);
+  };
+
+  const toggleStyleOptions = () => {
+    try {
+      ReactNativeHapticFeedback.trigger('impactLight', { enableVibrateFallback: true });
+    } catch (_) {}
+    setStyleOptionsExpanded(prev => !prev);
   };
 
   const requestNow = async () => {
@@ -170,56 +178,92 @@ export default function RequestBarberScreen({ route, navigation }) {
         <Text style={styles.optionValue}>{service}</Text>
       </View>
 
-      {/* Haircut Style Presets */}
-      <View style={styles.customCard}>
-        <Text style={styles.customCardTitle}>✂️ Haircut Style Preset (Optional)</Text>
-        <Text style={styles.customCardSubtitle}>Select a trending style to let your barber prepare:</Text>
-        <View style={styles.presetChipsRow}>
-          {STYLE_PRESETS.map((preset) => {
-            const isSelected = selectedPreset === preset;
-            return (
-              <TouchableOpacity
-                key={preset}
-                style={[styles.presetChip, isSelected && styles.presetChipActive]}
-                onPress={() => {
-                  try { ReactNativeHapticFeedback.trigger('impactLight', { enableVibrateFallback: true }); } catch (_) {}
-                  setSelectedPreset(isSelected ? '' : preset);
-                }}
-              >
-                <Text style={[styles.presetChipText, isSelected && styles.presetChipTextActive]}>
-                  {preset}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
+      {/* Optional Haircut Style Presets & Reference Photo Dropdown Accordion */}
+      <View style={styles.dropdownCard}>
+        <TouchableOpacity
+          style={styles.dropdownHeader}
+          activeOpacity={0.75}
+          onPress={toggleStyleOptions}
+          accessibilityRole="button"
+          accessibilityLabel="Toggle optional haircut style and photo upload"
+        >
+          <View style={styles.dropdownHeaderLeft}>
+            <View style={styles.dropdownTitleRow}>
+              <Text style={styles.dropdownTitle}>✂️ Haircut Style & Photo</Text>
+              <View style={styles.optionalBadge}>
+                <Text style={styles.optionalBadgeText}>Optional</Text>
+              </View>
+            </View>
+            <Text style={styles.dropdownSubtitle} numberOfLines={1}>
+              {selectedPreset || selectedPhoto
+                ? [selectedPreset, selectedPhoto ? '📸 Photo attached' : null].filter(Boolean).join(' • ')
+                : 'Tap to choose style preset or attach reference photo'}
+            </Text>
+          </View>
+          <View style={[styles.arrowCircle, styleOptionsExpanded && styles.arrowCircleActive]}>
+            <Text style={[styles.dropdownArrow, styleOptionsExpanded && styles.dropdownArrowActive]}>
+              {styleOptionsExpanded ? '▲' : '▼'}
+            </Text>
+          </View>
+        </TouchableOpacity>
 
-      {/* Haircut Reference Photo Upload */}
-      <View style={styles.customCard}>
-        <Text style={styles.customCardTitle}>📸 Haircut Reference Photo (Optional)</Text>
-        <Text style={styles.customCardSubtitle}>Show your barber the exact cut or taper look you want:</Text>
-        {selectedPhoto ? (
-          <View style={styles.photoPreviewCard}>
-            <Image source={{ uri: selectedPhoto.uri }} style={styles.photoPreview} />
-            <View style={styles.photoInfoWrap}>
-              <Text style={styles.photoTitle}>Attached Photo</Text>
-              <Text style={styles.photoSubtitle}>Ready for your barber</Text>
-              <TouchableOpacity style={styles.removePhotoButton} onPress={handleRemovePhoto}>
-                <Text style={styles.removePhotoText}>✕ Remove</Text>
-              </TouchableOpacity>
+        {styleOptionsExpanded ? (
+          <View style={styles.dropdownBody}>
+            {/* Style Preset Section */}
+            <View style={styles.innerSection}>
+              <Text style={styles.innerSectionTitle}>✂️ Haircut Style Preset</Text>
+              <Text style={styles.customCardSubtitle}>Select a trending style to let your barber prepare:</Text>
+              <View style={styles.presetChipsRow}>
+                {STYLE_PRESETS.map((preset) => {
+                  const isSelected = selectedPreset === preset;
+                  return (
+                    <TouchableOpacity
+                      key={preset}
+                      style={[styles.presetChip, isSelected && styles.presetChipActive]}
+                      onPress={() => {
+                        try { ReactNativeHapticFeedback.trigger('impactLight', { enableVibrateFallback: true }); } catch (_) {}
+                        setSelectedPreset(isSelected ? '' : preset);
+                      }}
+                    >
+                      <Text style={[styles.presetChipText, isSelected && styles.presetChipTextActive]}>
+                        {preset}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.innerDivider} />
+
+            {/* Reference Photo Upload Section */}
+            <View style={styles.innerSection}>
+              <Text style={styles.innerSectionTitle}>📸 Haircut Reference Photo</Text>
+              <Text style={styles.customCardSubtitle}>Show your barber the exact cut or taper look you want:</Text>
+              {selectedPhoto ? (
+                <View style={styles.photoPreviewCard}>
+                  <Image source={{ uri: selectedPhoto.uri }} style={styles.photoPreview} />
+                  <View style={styles.photoInfoWrap}>
+                    <Text style={styles.photoTitle}>Attached Photo</Text>
+                    <Text style={styles.photoSubtitle}>Ready for your barber</Text>
+                    <TouchableOpacity style={styles.removePhotoButton} onPress={handleRemovePhoto}>
+                      <Text style={styles.removePhotoText}>✕ Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.uploadPhotoButton} onPress={handlePickPhoto}>
+                  <Text style={styles.uploadPhotoIcon}>📷</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.uploadPhotoTitle}>Choose Photo from Gallery</Text>
+                    <Text style={styles.uploadPhotoSubtitle}>Attach style inspiration photo</Text>
+                  </View>
+                  <Text style={styles.uploadPhotoArrow}>➔</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
-        ) : (
-          <TouchableOpacity style={styles.uploadPhotoButton} onPress={handlePickPhoto}>
-            <Text style={styles.uploadPhotoIcon}>📷</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.uploadPhotoTitle}>Choose Photo from Gallery</Text>
-              <Text style={styles.uploadPhotoSubtitle}>Attach style inspiration photo</Text>
-            </View>
-            <Text style={styles.uploadPhotoArrow}>➔</Text>
-          </TouchableOpacity>
-        )}
+        ) : null}
       </View>
 
       {/* Custom Haircut Notes Input */}
@@ -314,6 +358,91 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   buttonText: { color: colors.white, fontSize: 16, fontWeight: '700' },
+  dropdownCard: {
+    backgroundColor: colors.white,
+    borderRadius: 14,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.soft,
+    overflow: 'hidden',
+  },
+  dropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+  },
+  dropdownHeaderLeft: {
+    flex: 1,
+    marginRight: 10,
+  },
+  dropdownTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dropdownTitle: {
+    color: colors.charcoal,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  optionalBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  optionalBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.steel,
+  },
+  dropdownSubtitle: {
+    color: colors.steel,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  arrowCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  arrowCircleActive: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  dropdownArrow: {
+    fontSize: 12,
+    color: colors.charcoal,
+    fontWeight: '700',
+  },
+  dropdownArrowActive: {
+    color: colors.white,
+  },
+  dropdownBody: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  innerSection: {
+    marginTop: 4,
+  },
+  innerSectionTitle: {
+    color: colors.charcoal,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  innerDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 12,
+  },
   customCard: {
     backgroundColor: colors.white,
     borderRadius: 14,
