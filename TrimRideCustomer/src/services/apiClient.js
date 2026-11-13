@@ -116,6 +116,13 @@ export const apiClient = {
     });
   },
 
+  gmailSignup(payload) {
+    return request('/auth/gmail-signup', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   getMe(token) {
     return request('/auth/me', {
       headers: authHeader(token),
@@ -306,6 +313,13 @@ export const apiClient = {
       method: 'POST',
       headers: authHeader(token),
       body: JSON.stringify({ pin }),
+    });
+  },
+
+  deleteAccount(token) {
+    return request('/auth/delete-account', {
+      method: 'DELETE',
+      headers: authHeader(token),
     });
   },
 };

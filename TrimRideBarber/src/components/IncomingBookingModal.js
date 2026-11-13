@@ -138,6 +138,12 @@ export default function IncomingBookingModal({
                 <Text style={styles.detailLabel}>Est. Payout</Text>
                 <Text style={styles.payoutValue}>{request.price || '$25.00'}</Text>
               </View>
+              {(request.customerPhone || request.customer_phone) ? (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Client Phone</Text>
+                  <Text style={styles.detailValue}>📞 {request.customerPhone || request.customer_phone}</Text>
+                </View>
+              ) : null}
               <View style={[styles.detailRow, styles.lastDetailRow]}>
                 <Text style={styles.detailLabel}>Waitlist</Text>
                 <Text style={styles.detailValue}>{request.eta}</Text>

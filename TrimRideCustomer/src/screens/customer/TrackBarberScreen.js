@@ -31,6 +31,8 @@ export default function TrackBarberScreen({ route, navigation }) {
   const [mapReady, setMapReady] = useState(false);
   const mapRef = useRef(null);
   const [cancelling, setCancelling] = useState(false);
+  const [showReviewCta, setShowReviewCta] = useState(initialStatus === 'completed');
+  const [barberPhone, setBarberPhone] = useState(barber?.phone || barber?.barber_phone || null);
   const { token } = useAppMode();
   const missingBookingContext = !barber || !barber.name || !bookingId;
 
@@ -161,6 +163,8 @@ export default function TrackBarberScreen({ route, navigation }) {
     } else if (status === 'cancelled') {
       try { Vibration.vibrate([0, 400]); } catch (e) {}
       try { ReactNativeHapticFeedback.trigger('notificationError', { enableVibrateFallback: true }); } catch (e) {}
+    } else if (status === 'completed') {
+      setShowReviewCta(true);
     }
   }, [status]);
 
@@ -319,6 +323,9 @@ export default function TrackBarberScreen({ route, navigation }) {
             if (booking.notes) {
               setNotes(booking.notes);
             }
+            if (booking.barber_phone) {
+              setBarberPhone(booking.barber_phone);
+            }
             const bLat = Number(booking.latitude);
             const bLng = Number(booking.longitude);
             if (Number.isFinite(bLat) && Number.isFinite(bLng) && bLat !== 0 && bLng !== 0) {
@@ -355,6 +362,7 @@ export default function TrackBarberScreen({ route, navigation }) {
     socket.on('connect', onConnect);
     socket.on('reconnect', onConnect);
 
+    refreshLatestStatus();
     const intervalId = setInterval(() => {
       refreshLatestStatus();
     }, 6000);
@@ -517,6 +525,32 @@ export default function TrackBarberScreen({ route, navigation }) {
           <Text style={styles.chatButtonText}>💬 Live Chat & En-Route Contact</Text>
         </TouchableOpacity>
 
+        {(status === 'confirmed' || status === 'in_progress') && barberPhone ? (
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+            <TouchableOpacity
+              style={{ flex: 1, backgroundColor: '#064E3B', borderRadius: 14, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#10B981' }}
+              onPress={() => {
+                try { ReactNativeHapticFeedback.trigger('impactMedium', { enableVibrateFallback: true }); } catch (e) {}
+                Linking.openURL('tel:' + barberPhone);
+              }}
+            >
+              <Text style={{ color: '#10B981', fontWeight: '800', fontSize: 14 }}>📞 Call Barber</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flex: 1, backgroundColor: '#064E3B', borderRadius: 14, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#25D366' }}
+              onPress={() => {
+                try { ReactNativeHapticFeedback.trigger('impactMedium', { enableVibrateFallback: true }); } catch (e) {}
+                const phoneClean = String(barberPhone).replace(/\D/g, '');
+                Linking.openURL('whatsapp://send?phone=' + phoneClean).catch(() =>
+                  Linking.openURL('https://wa.me/' + phoneClean)
+                );
+              }}
+            >
+              <Text style={{ color: '#25D366', fontWeight: '800', fontSize: 14 }}>💬 WhatsApp</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         {(status === 'confirmed' || status === 'completed') && (
           <TouchableOpacity
             style={styles.paymentButton}
@@ -532,6 +566,25 @@ export default function TrackBarberScreen({ route, navigation }) {
             }}
           >
             <Text style={styles.paymentButtonText}>💳 Proceed to Payment & Tipping</Text>
+          </TouchableOpacity>
+        )}
+
+        {showReviewCta && (
+          <TouchableOpacity
+            style={{ backgroundColor: '#1E3A2B', borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginBottom: 12, borderWidth: 1.5, borderColor: '#F59E0B' }}
+            onPress={() => {
+              try { ReactNativeHapticFeedback.trigger('notificationSuccess', { enableVibrateFallback: true }); } catch (e) {}
+              setShowReviewCta(false);
+              navigation.navigate('ReviewBarber', {
+                bookingId: bookingId,
+                barberName: barber.name,
+                barberId: barber.barberId || barber.id,
+                service: service,
+              });
+            }}
+          >
+            <Text style={{ color: '#F59E0B', fontWeight: '900', fontSize: 16 }}>⭐ Rate Your Experience</Text>
+            <Text style={{ color: '#D97706', fontSize: 12, marginTop: 4 }}>Tap to leave a review for {barber?.name}</Text>
           </TouchableOpacity>
         )}
 

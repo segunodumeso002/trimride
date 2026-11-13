@@ -10,6 +10,7 @@ const {
   isFirebaseAuthEnabled,
   createFirebaseUser,
   deleteFirebaseUser,
+  deleteFirebaseUserByEmail,
   signInWithFirebasePassword,
 } = require('../services/firebaseAuthService');
 const multer = require('multer');
@@ -68,6 +69,31 @@ const loginSchema = Joi.object({
   email:    Joi.string().email().max(254).required(),
   password: Joi.string().min(1).max(128).required(),
 });
+
+const gmailSignupSchema = Joi.object({
+  email:     Joi.string().email().max(254).required(),
+  userType:  Joi.string().valid('customer', 'barber').required(),
+  firstName: Joi.string().trim().max(50).optional().allow('', null),
+  lastName:  Joi.string().trim().max(50).optional().allow('', null),
+  phone:     Joi.string().trim().max(30).optional().allow('', null),
+  country:   Joi.string().trim().max(100).optional().allow('', null),
+  latitude:  Joi.number().optional().allow('', null).empty(''),
+  longitude: Joi.number().optional().allow('', null).empty(''),
+});
+
+function deriveNamesFromGmail(email, firstName, lastName, userType) {
+  const cleanFirst = String(firstName || '').trim();
+  const cleanLast = String(lastName || '').trim();
+  if (cleanFirst && cleanLast) {
+    return { firstName: cleanFirst, lastName: cleanLast };
+  }
+  const handle = String(email || '').split('@')[0].replace(/\d+$/, '') || 'trimride';
+  const parts = handle.split(/[._-]+/).filter(Boolean);
+  const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  const derivedFirst = cleanFirst || (parts[0] ? capitalize(parts[0]) : 'TrimRide');
+  const derivedLast = cleanLast || (parts[1] ? capitalize(parts[1]) : (userType === 'barber' ? 'Barber' : 'Member'));
+  return { firstName: derivedFirst, lastName: derivedLast };
+}
 
 function createJwtForUser(userId) {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -304,6 +330,152 @@ router.get('/me', requireAuth, async (req, res) => {
 
     return res.json({
       user: userPayload,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Quick Gmail Sign-Up / Sign-In for Customer and Barber apps
+router.post('/gmail-signup', validate(gmailSignupSchema), async (req, res) => {
+  const { email, userType, firstName, lastName, phone, country, latitude, longitude } = req.body;
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+
+  if (!normalizedEmail.endsWith('@gmail.com') && !normalizedEmail.endsWith('@googlemail.com')) {
+    return res.status(400).json({ error: 'Please enter a valid @gmail.com address.' });
+  }
+
+  try {
+    const existingResult = await pool.query('SELECT * FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
+
+    if (existingResult.rows.length > 0) {
+      const existingUser = existingResult.rows[0];
+      if (userType === 'barber') {
+        const bpResult = await pool.query('SELECT id FROM barber_profiles WHERE user_id = $1', [existingUser.id]);
+        if (bpResult.rows.length === 0) {
+          await ensureBarberProfile(
+            'barber',
+            existingUser.id,
+            existingUser.first_name || 'TrimRide',
+            existingUser.last_name || 'Barber',
+            existingUser.address,
+            existingUser.city,
+            existingUser.state,
+            existingUser.country || country || 'South Africa',
+            null,
+            latitude || -26.2041,
+            longitude || 28.0473
+          );
+        }
+      }
+
+      const token = createJwtForUser(existingUser.id);
+      const userPayload = {
+        id: existingUser.id,
+        email: existingUser.email,
+        firstName: existingUser.first_name,
+        lastName: existingUser.last_name,
+        userType: existingUser.user_type,
+      };
+      if (existingUser.phone) userPayload.phone = existingUser.phone;
+      if (existingUser.country) userPayload.country = existingUser.country;
+
+      return res.json({
+        token,
+        user: userPayload,
+        isNewUser: false,
+      });
+    }
+
+    const names = deriveNamesFromGmail(normalizedEmail, firstName, lastName, userType);
+    const autoPassword = `GmailAuth#${Date.now()}!${Math.random().toString(36).slice(2, 10)}`;
+    const resolvedCountry = country || 'South Africa';
+
+    if (isFirebaseAuthEnabled()) {
+      try {
+        await createFirebaseUser({
+          email: normalizedEmail,
+          password: autoPassword,
+          firstName: names.firstName,
+          lastName: names.lastName,
+        });
+      } catch (_fbErr) {
+        // Best-effort Firebase sync so Gmail quick signup is never blocked
+      }
+    }
+
+    const newUser = await createLocalUser({
+      email: normalizedEmail,
+      password: autoPassword,
+      firstName: names.firstName,
+      lastName: names.lastName,
+      userType,
+      phone: phone || null,
+      profile_image: null,
+      address: null,
+      city: null,
+      state: null,
+      country: resolvedCountry,
+    });
+
+    await ensureBarberProfile(
+      userType,
+      newUser.id,
+      names.firstName,
+      names.lastName,
+      null,
+      null,
+      null,
+      resolvedCountry,
+      null,
+      latitude || -26.2041,
+      longitude || 28.0473
+    );
+
+    const token = createJwtForUser(newUser.id);
+    const userPayload = {
+      id: newUser.id,
+      email: newUser.email,
+      firstName: newUser.first_name || names.firstName,
+      lastName: newUser.last_name || names.lastName,
+      userType: newUser.user_type || userType,
+      country: newUser.country || resolvedCountry,
+    };
+    if (newUser.phone) userPayload.phone = newUser.phone;
+
+    return res.json({
+      token,
+      user: userPayload,
+      isNewUser: true,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Permanently delete user account (Mandatory for Google Play compliance)
+router.delete('/delete-account', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const userResult = await pool.query('SELECT id, email FROM users WHERE id = $1', [userId]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const { email } = userResult.rows[0];
+
+    // Remove from Firebase auth if enabled
+    if (isFirebaseAuthEnabled() && email) {
+      await deleteFirebaseUserByEmail(email);
+    }
+
+    // Delete user from DB (cascades to barber_profiles, bookings, favorites, reviews, user_push_tokens)
+    await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+
+    return res.json({
+      success: true,
+      message: 'Account and associated data have been permanently deleted.',
     });
   } catch (error) {
     return res.status(500).json({ error: error.message });

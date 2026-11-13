@@ -44,6 +44,22 @@ async function deleteFirebaseUser(uid) {
   }
 }
 
+async function deleteFirebaseUserByEmail(email) {
+  if (!email) return;
+
+  const auth = getFirebaseAuth();
+  if (!auth) return;
+
+  try {
+    const userRecord = await auth.getUserByEmail(email);
+    if (userRecord && userRecord.uid) {
+      await auth.deleteUser(userRecord.uid);
+    }
+  } catch (_error) {
+    // Best-effort cleanup only.
+  }
+}
+
 async function signInWithFirebasePassword(email, password) {
   const apiKey = getFirebaseWebApiKey();
   if (!apiKey) {
@@ -95,5 +111,6 @@ module.exports = {
   isFirebaseAuthEnabled,
   createFirebaseUser,
   deleteFirebaseUser,
+  deleteFirebaseUserByEmail,
   signInWithFirebasePassword,
 };

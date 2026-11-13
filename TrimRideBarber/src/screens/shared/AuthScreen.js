@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, ScrollView, KeyboardAvoidingView, Platform, StatusBar, PermissionsAndroid,
+  Alert, ScrollView, KeyboardAvoidingView, Platform, StatusBar, PermissionsAndroid, Modal,
 } from 'react-native';
 import Geolocation from 'react-native-geolocation-service';
 import { apiClient } from '../../services/apiClient';
@@ -34,9 +34,51 @@ export default function AuthScreen() {
   const [profileImage, setProfileImage] = useState(null);
   const [shopImage, setShopImage] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [gmailModalVisible, setGmailModalVisible] = useState(false);
+  const [gmailAddress, setGmailAddress] = useState('');
+  const [gmailName, setGmailName] = useState('');
+  const [gmailLoading, setGmailLoading] = useState(false);
   const { establishSession } = useAppMode();
   const selectedCountry = Country.getCountryByCode(countryCode);
   const callingCode = selectedCountry?.phonecode || '27';
+
+  const handleGmailSignup = async () => {
+    const rawEmail = gmailAddress.trim().toLowerCase();
+    if (!rawEmail) {
+      Alert.alert('Gmail required', 'Please enter your @gmail.com address.');
+      return;
+    }
+    const normalizedGmail = rawEmail.includes('@') ? rawEmail : `${rawEmail}@gmail.com`;
+    if (!normalizedGmail.endsWith('@gmail.com') && !normalizedGmail.endsWith('@googlemail.com')) {
+      Alert.alert('Invalid Gmail', 'Please enter a valid @gmail.com address.');
+      return;
+    }
+
+    const nameParts = gmailName.trim().split(/\s+/).filter(Boolean);
+    const derivedFirst = nameParts[0] || '';
+    const derivedLast = nameParts.slice(1).join(' ') || '';
+
+    setGmailLoading(true);
+    try {
+      const countryName = selectedCountry?.name || 'South Africa';
+      const payload = await apiClient.gmailSignup({
+        email: normalizedGmail,
+        firstName: derivedFirst || undefined,
+        lastName: derivedLast || undefined,
+        country: countryName,
+        latitude,
+        longitude,
+        userType: 'barber',
+      });
+
+      setGmailModalVisible(false);
+      await establishSession({ token: payload.token, user: payload.user });
+    } catch (error) {
+      Alert.alert('Gmail Sign-Up Failed', error.message || 'Could not sign up with Gmail.');
+    } finally {
+      setGmailLoading(false);
+    }
+  };
 
   const pickProfileImage = async () => {
     const result = await launchImageLibrary({ mediaType: 'photo', quality: 0.8 });
@@ -159,6 +201,86 @@ export default function AuthScreen() {
             ? 'Sign in to manage your queue and grow your business.'
             : 'Set up your barber profile and start taking bookings.'}
         </Text>
+
+        {/* Prominent 1-Tap Gmail Sign-Up Button at Opening of App */}
+        <TouchableOpacity
+          style={styles.gmailButton}
+          onPress={() => setGmailModalVisible(true)}
+          activeOpacity={0.85}
+          disabled={loading || gmailLoading}
+        >
+          <View style={styles.gmailBadge}>
+            <Text style={styles.gmailBadgeText}>G</Text>
+          </View>
+          <Text style={styles.gmailButtonText}>Sign up with your Gmail address</Text>
+        </TouchableOpacity>
+
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        <Modal
+          visible={gmailModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setGmailModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <View style={styles.gmailBadgeLarge}>
+                  <Text style={styles.gmailBadgeLargeText}>G</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalTitle}>Quick Gmail Sign-Up</Text>
+                  <Text style={styles.modalSub}>Register or sign in instantly as a TrimRide Barber</Text>
+                </View>
+              </View>
+
+              <Text style={styles.label}>Your Gmail Address</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="yourname@gmail.com"
+                placeholderTextColor={colors.steel}
+                value={gmailAddress}
+                onChangeText={setGmailAddress}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoFocus
+              />
+
+              <Text style={styles.label}>Your Name / Shop Name (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Mike Dlamini"
+                placeholderTextColor={colors.steel}
+                value={gmailName}
+                onChangeText={setGmailName}
+              />
+
+              <TouchableOpacity
+                style={styles.gmailConfirmBtn}
+                onPress={handleGmailSignup}
+                disabled={gmailLoading}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.gmailConfirmBtnText}>
+                  {gmailLoading ? 'Setting up barber profile...' : 'Continue with Gmail'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setGmailModalVisible(false)}
+                disabled={gmailLoading}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         {/* Signup-only fields */}
         {mode === 'signup' && (
@@ -478,5 +600,120 @@ const styles = StyleSheet.create({
   },
   map: {
     ...StyleSheet.absoluteFillObject,
+  },
+  gmailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#4285F4',
+    borderRadius: 14,
+    paddingVertical: 15,
+    paddingHorizontal: 18,
+    marginBottom: spacing.md,
+    shadowColor: '#4285F4',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  gmailBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#EA4335',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  gmailBadgeText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 16,
+  },
+  gmailButtonText: {
+    color: colors.ink,
+    fontWeight: '800',
+    fontSize: 16,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: spacing.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.lightGray,
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    color: colors.steel,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  modalCard: {
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    padding: spacing.lg,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  gmailBadgeLarge: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#EA4335',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  gmailBadgeLargeText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 22,
+  },
+  modalTitle: {
+    color: colors.ink,
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  modalSub: {
+    color: colors.steel,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  gmailConfirmBtn: {
+    backgroundColor: '#4285F4',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: spacing.lg,
+  },
+  gmailConfirmBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 16,
+  },
+  modalCancelBtn: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  modalCancelText: {
+    color: colors.steel,
+    fontWeight: '700',
+    fontSize: 15,
   },
 });

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Vibration, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, RefreshControl, Modal, TextInput, Image } from 'react-native';
+import { Alert, AppState, Vibration, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, RefreshControl, Modal, TextInput, Image, Linking, Share } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import SoundPlayer from 'react-native-sound-player';
 import { colors, spacing } from '../../theme/tokens';
@@ -26,7 +26,42 @@ export default function BarberHubScreen({ navigation }) {
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [inputPin, setInputPin] = useState('');
   const [verifyingPin, setVerifyingPin] = useState(false);
-  const { signOut, token, user } = useAppMode();
+  const [socketConnected, setSocketConnected] = useState(true);
+  const { signOut, token, user, deleteAccountAndSignOut } = useAppMode();
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      '⚠️ Delete My Account',
+      'This will permanently delete your TrimRide barber account and all your data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, Delete Permanently',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Final Confirmation',
+              'Are you absolutely sure? All your bookings, earnings history, and profile will be lost forever.',
+              [
+                { text: 'Go Back', style: 'cancel' },
+                {
+                  text: 'Delete Account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await deleteAccountAndSignOut();
+                    } catch (err) {
+                      Alert.alert('Error', 'Could not delete account. Please try again or contact support.');
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  };
   const appStateRef = useRef(AppState.currentState);
 
   const playBookingPing = useCallback(() => {
@@ -106,6 +141,7 @@ export default function BarberHubScreen({ navigation }) {
       const normalized = data.map(item => ({
         id: String(item.id),
         customer: `${item.first_name} ${item.last_name}`,
+        customerPhone: item.customer_phone || item.phone || null,
         service: item.service_name || 'General Grooming',
         eta: `Queue #${item.queue_position || '-'}`,
         price: (item.total_amount || item.service_price) ? `$${item.total_amount || item.service_price}` : '$25.00',
@@ -178,6 +214,7 @@ export default function BarberHubScreen({ navigation }) {
           const newRequest = {
             id: String(latest.id),
             customer: `${latest.first_name} ${latest.last_name}`,
+            customerPhone: latest.customer_phone || latest.phone || null,
             service: latest.service_name || 'General Grooming',
             eta: `Queue #${latest.queue_position || '-'}`,
             price: (latest.total_amount || latest.service_price) ? `$${latest.total_amount || latest.service_price}` : '$25.00',
@@ -201,16 +238,22 @@ export default function BarberHubScreen({ navigation }) {
       setNewRequestAlert(true);
       setTimeout(() => setNewRequestAlert(false), 4000);
     };
-    const onConnect = () => loadRequests();
+    const onConnect = () => {
+      setSocketConnected(true);
+      loadRequests();
+    };
+    const onDisconnect = () => setSocketConnected(false);
 
     socket.on('booking-requested', onRequested);
     socket.on('connect', onConnect);
     socket.on('reconnect', onConnect);
+    socket.on('disconnect', onDisconnect);
 
     return () => {
       socket.off('booking-requested', onRequested);
       socket.off('connect', onConnect);
       socket.off('reconnect', onConnect);
+      socket.off('disconnect', onDisconnect);
     };
   }, [token, loadRequests, playBookingPing, vibrateBookingAlert]);
 
@@ -378,6 +421,12 @@ export default function BarberHubScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {!socketConnected && (
+        <View style={{ position: 'absolute', top: 10, alignSelf: 'center', zIndex: 999, backgroundColor: '#92400E', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6, elevation: 8 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#F59E0B' }} />
+          <Text style={{ color: '#FEF3C7', fontWeight: '700', fontSize: 12 }}>🔄 Reconnecting to TrimRide...</Text>
+        </View>
+      )}
       <IncomingBookingModal
         visible={!!incomingRequest}
         request={incomingRequest}
@@ -486,6 +535,20 @@ export default function BarberHubScreen({ navigation }) {
         </View>
 
         <TouchableOpacity
+          style={{ backgroundColor: '#0C2340', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 12, borderWidth: 1.5, borderColor: '#3B82F6', gap: 8 }}
+          onPress={() => {
+            try { ReactNativeHapticFeedback.trigger('impactMedium', { enableVibrateFallback: true }); } catch (e) {}
+            const firstName = user?.firstName || user?.first_name || 'I\'m';
+            const lastName = user?.lastName || user?.last_name || '';
+            Share.share({
+              message: `Book me on TrimRide! I'm ${firstName} ${lastName} — premium cuts, on demand. Download the TrimRide app and book your next appointment! 💈✂️`,
+            }).catch(() => {});
+          }}
+        >
+          <Text style={{ color: '#3B82F6', fontWeight: '900', fontSize: 15 }}>🚀 Share My TrimRide Profile</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={{ backgroundColor: '#0F1F35', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderWidth: 1.5, borderColor: '#D97706', shadowColor: '#0F1F35', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 5, elevation: 4 }}
           onPress={() => {
             try { ReactNativeHapticFeedback.trigger('impactMedium', { enableVibrateFallback: true }); } catch (e) {}
@@ -569,6 +632,9 @@ export default function BarberHubScreen({ navigation }) {
           <TouchableOpacity style={styles.secondaryButton} onPress={handleSignOut}>
             <Text style={styles.secondaryText}>Sign Out</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={[styles.secondaryButton, { borderColor: '#EF4444' }]} onPress={handleDeleteAccount}>
+            <Text style={[styles.secondaryText, { color: '#EF4444' }]}>🗑️ Delete Account</Text>
+          </TouchableOpacity>
         </ScrollView>
 
       {activeBooking && (
@@ -651,6 +717,31 @@ export default function BarberHubScreen({ navigation }) {
               <Text style={styles.activeChatButtonText}>💬 Chat</Text>
             </TouchableOpacity>
           </View>
+          {(activeBooking.customer_phone || activeBooking.phone) ? (
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#064E3B', borderRadius: 12, paddingVertical: 11, alignItems: 'center', borderWidth: 1, borderColor: '#10B981' }}
+                onPress={() => {
+                  try { ReactNativeHapticFeedback.trigger('impactMedium', { enableVibrateFallback: true }); } catch (e) {}
+                  Linking.openURL('tel:' + (activeBooking.customer_phone || activeBooking.phone));
+                }}
+              >
+                <Text style={{ color: '#10B981', fontWeight: '800', fontSize: 13 }}>📞 Call Client</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#064E3B', borderRadius: 12, paddingVertical: 11, alignItems: 'center', borderWidth: 1, borderColor: '#25D366' }}
+                onPress={() => {
+                  try { ReactNativeHapticFeedback.trigger('impactMedium', { enableVibrateFallback: true }); } catch (e) {}
+                  const phoneClean = String(activeBooking.customer_phone || activeBooking.phone).replace(/\D/g, '');
+                  Linking.openURL('whatsapp://send?phone=' + phoneClean).catch(() =>
+                    Linking.openURL('https://wa.me/' + phoneClean)
+                  );
+                }}
+              >
+                <Text style={{ color: '#25D366', fontWeight: '800', fontSize: 13 }}>💬 WhatsApp</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
       )}
 

@@ -169,6 +169,24 @@ export function AppModeProvider({ children, defaultRole }) {
         setIsSignedIn(false);
         AsyncStorage.removeItem(SESSION_KEY);
       },
+      deleteAccountAndSignOut: async () => {
+        if (token) {
+          try {
+            await apiClient.deleteAccount(token);
+          } catch (_err) {
+            // Proceed with local logout even if network fails
+          }
+        }
+        disconnectSocket();
+        if (ENABLE_FCM && token) {
+          await fcmService.unregisterTokenFromBackend(token).catch(() => {});
+        }
+        setToken(null);
+        setUser(null);
+        setRole(null);
+        setIsSignedIn(false);
+        AsyncStorage.removeItem(SESSION_KEY);
+      },
     }),
     [role, isSignedIn, token, user, isRestoring, establishSession]
   );

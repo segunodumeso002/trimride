@@ -213,6 +213,7 @@ router.get('/dispatch', validate(coordQuerySchema, 'query'), async (req, res) =>
     const result = await pool.query(
       `
       SELECT bp.id, bp.user_id, bp.shop_name, bp.latitude, bp.longitude, bp.rating, bp.queue_count, bp.estimated_wait_time,
+             u.phone, u.first_name, u.last_name,
              (6371 * acos(cos(radians($1)) * cos(radians(bp.latitude)) *
              cos(radians(bp.longitude) - radians($2)) + sin(radians($1)) *
              sin(radians(bp.latitude)))) AS distance

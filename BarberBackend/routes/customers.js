@@ -176,9 +176,11 @@ router.get('/my-booking', requireAuth, async (req, res) => {
       `SELECT b.id, b.status, b.queue_position, b.barber_id,
               b.reference_photo, b.notes, b.verification_pin,
               bp.shop_name, bp.latitude, bp.longitude,
+              u.phone AS barber_phone, u.first_name AS barber_first_name, u.last_name AS barber_last_name,
               s.name AS service_name
        FROM bookings b
        JOIN barber_profiles bp ON b.barber_id = bp.id
+       JOIN users u ON bp.user_id = u.id
        LEFT JOIN services s ON b.service_id = s.id
        WHERE b.customer_id = $1 AND b.status IN ('pending', 'confirmed', 'in_progress')
        ORDER BY b.created_at DESC

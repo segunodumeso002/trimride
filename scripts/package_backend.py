@@ -2,7 +2,7 @@ import os
 import zipfile
 
 backend_dir = r"c:\Users\SCHOOL\Desktop\Launch-codes\BarberBackend"
-zip_path = r"c:\Users\SCHOOL\Desktop\Launch-codes\app-v11.zip"
+zip_path = r"c:\Users\SCHOOL\Desktop\Launch-codes\app-v13.zip"
 
 excluded_dirs = {"node_modules", ".git", ".vscode", "coverage", "app_versions"}
 excluded_files = {".env"}

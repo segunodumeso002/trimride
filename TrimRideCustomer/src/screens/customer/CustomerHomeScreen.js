@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, PermissionsAndroid, Platform, ActivityIndicator } from 'react-native';
+import { Alert, View, Text, FlatList, TouchableOpacity, StyleSheet, PermissionsAndroid, Platform, ActivityIndicator } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import UberBottomSheet from '../../components/UberBottomSheet';
 import Geolocation from 'react-native-geolocation-service';
@@ -16,7 +16,41 @@ import { getCountryCoordinates } from '../../utils/countryLocation';
 const DEMO_COORDS = { latitude: -26.2041, longitude: 28.0473 };
 
 export default function CustomerHomeScreen({ navigation }) {
-  const { signOut, user, token, isFirstLoginSession, consumeFirstLoginSession } = useAppMode();
+  const { signOut, user, token, isFirstLoginSession, consumeFirstLoginSession, deleteAccountAndSignOut } = useAppMode();
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      '⚠️ Delete My Account',
+      'This will permanently delete your TrimRide account and all your data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, Delete Permanently',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Final Confirmation',
+              'Are you absolutely sure? All your bookings, history, and data will be lost forever.',
+              [
+                { text: 'Go Back', style: 'cancel' },
+                {
+                  text: 'Delete Account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await deleteAccountAndSignOut();
+                    } catch (err) {
+                      Alert.alert('Error', 'Could not delete account. Please try again or contact support.');
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  };
   const mapRef = useRef(null);
   const bottomSheetRef = useRef(null);
   const [barbers, setBarbers] = useState([]);
@@ -29,6 +63,7 @@ export default function CustomerHomeScreen({ navigation }) {
   const [bookingHistory, setBookingHistory] = useState([]);
   const [favoriteIds, setFavoriteIds] = useState(new Set());
   const [loyalty, setLoyalty] = useState(null);
+  const [socketConnected, setSocketConnected] = useState(true);
 
   const userCountryCoords = useMemo(() => {
     return getCountryCoordinates(user?.country, user?.phone);
@@ -164,6 +199,7 @@ export default function CustomerHomeScreen({ navigation }) {
           rating: Number(item.rating || 0).toFixed(1),
           queue: item.queue_count || 0,
           serviceType: selectedService,
+          phone: item.phone || null,
         };
       });
 
@@ -269,11 +305,13 @@ export default function CustomerHomeScreen({ navigation }) {
       loadLoyalty();
     };
     const onConnect = () => {
+      setSocketConnected(true);
       loadCustomerBookings();
       loadDispatch(true);
       loadFavorites();
       loadLoyalty();
     };
+    const onDisconnect = () => setSocketConnected(false);
     const onAvailabilityUpdated = () => loadDispatch(true);
     socket.on('booking-status-updated', onStatusUpdate);
     socket.on('barber-availability-updated', onAvailabilityUpdated);
@@ -287,12 +325,14 @@ export default function CustomerHomeScreen({ navigation }) {
 
     socket.on('connect', onConnect);
     socket.on('reconnect', onConnect);
+    socket.on('disconnect', onDisconnect);
     return () => {
       socket.off('booking-status-updated', onStatusUpdate);
       socket.off('barber-availability-updated', onAvailabilityUpdated);
       socket.off('queue-updated', onQueueUpdated);
       socket.off('connect', onConnect);
       socket.off('reconnect', onConnect);
+      socket.off('disconnect', onDisconnect);
     };
   }, [token, loadCustomerBookings, loadDispatch]);
 
@@ -352,6 +392,9 @@ export default function CustomerHomeScreen({ navigation }) {
         <TouchableOpacity style={styles.ghostButton} onPress={signOut}>
           <Text style={styles.ghostText}>Sign Out</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={[styles.ghostButton, { borderColor: '#EF4444', marginTop: 6 }]} onPress={handleDeleteAccount}>
+          <Text style={[styles.ghostText, { color: '#EF4444' }]}>🗑️ Delete</Text>
+        </TouchableOpacity>
       </View>
 
       <TouchableOpacity
@@ -391,6 +434,7 @@ export default function CustomerHomeScreen({ navigation }) {
               barberId: activeBooking.barber_id,
               latitude: Number(activeBooking.latitude),
               longitude: Number(activeBooking.longitude),
+              phone: activeBooking.barber_phone || activeBooking.phone || null,
             },
             service: activeBooking.service_name || 'General Grooming',
             bookingId: activeBooking.id,
@@ -585,6 +629,12 @@ export default function CustomerHomeScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {!socketConnected && (
+        <View style={{ position: 'absolute', top: 10, alignSelf: 'center', zIndex: 999, backgroundColor: '#92400E', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6, elevation: 8 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#F59E0B' }} />
+          <Text style={{ color: '#FEF3C7', fontWeight: '700', fontSize: 12 }}>🔄 Reconnecting to TrimRide...</Text>
+        </View>
+      )}
       <MapView
         ref={mapRef}
         key={`map_${userCountryCoords.isoCode}`}

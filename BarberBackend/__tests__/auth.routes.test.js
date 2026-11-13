@@ -237,4 +237,66 @@ describe('Auth routes', () => {
       },
     });
   });
+
+  test('DELETE /api/auth/delete-account deletes user and returns success', async () => {
+    const app = createTestApp();
+
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: 88, email: 'customer@trimride.app' }] })
+      .mockResolvedValueOnce({ rowCount: 1 });
+
+    const res = await request(app)
+      .delete('/api/auth/delete-account')
+      .set('x-user-id', '88');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.message).toMatch(/permanently deleted/i);
+    expect(pool.query).toHaveBeenCalledWith(
+      'DELETE FROM users WHERE id = $1',
+      [88]
+    );
+  });
+
+  test('POST /api/auth/gmail-signup registers a new Gmail user and returns JWT', async () => {
+    const app = createTestApp();
+
+    pool.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 99,
+            email: 'newuser@gmail.com',
+            first_name: 'Newuser',
+            last_name: 'Member',
+            user_type: 'customer',
+            phone: null,
+            country: 'South Africa',
+          },
+        ],
+      });
+
+    const res = await request(app).post('/api/auth/gmail-signup').send({
+      email: 'newuser@gmail.com',
+      userType: 'customer',
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.token).toBe('mock-jwt-token');
+    expect(res.body.isNewUser).toBe(true);
+    expect(res.body.user.email).toBe('newuser@gmail.com');
+  });
+
+  test('POST /api/auth/gmail-signup rejects non-gmail addresses', async () => {
+    const app = createTestApp();
+
+    const res = await request(app).post('/api/auth/gmail-signup').send({
+      email: 'someone@yahoo.com',
+      userType: 'customer',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/gmail/i);
+  });
 });

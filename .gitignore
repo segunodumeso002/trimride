@@ -15,6 +15,7 @@ node_modules/
 **/.gradle/
 *.zip
 *.apk
+*.bundle
 Release_APKs/
 
 # Logs

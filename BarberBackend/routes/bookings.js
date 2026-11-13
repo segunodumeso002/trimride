@@ -229,7 +229,7 @@ router.get('/my-requests', requireAuth, async (req, res) => {
       `
       SELECT b.id, b.status, b.queue_position, b.created_at, b.total_amount,
              b.reference_photo, b.notes, b.verification_pin,
-             u.first_name, u.last_name,
+             u.first_name, u.last_name, u.phone AS customer_phone,
              s.name AS service_name, s.price AS service_price
       FROM bookings b
       JOIN users u ON b.customer_id = u.id
